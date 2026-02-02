@@ -1,0 +1,28 @@
+# Binaries
+bin/
+/fastatic-build
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI tools
+.claude/
+.checkpoint/
+
+# Environment
+.env
+.env.*
+
+# Test output
+coverage.out
+
+# Generated sites
+output/
