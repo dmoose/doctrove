@@ -16,6 +16,7 @@ import (
 type Engine struct {
 	Config    *config.Config
 	Store     *store.Store
+	Git       *store.GitStore
 	Discovery *discovery.Discoverer
 	Mirror    *mirror.Mirror
 	Fetcher   *fetcher.Fetcher
@@ -32,9 +33,15 @@ func New(rootDir string) (*Engine, error) {
 	f := fetcher.New()
 	s := store.New(rootDir)
 
+	gs, err := store.InitGit(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("initializing git: %w", err)
+	}
+
 	return &Engine{
 		Config:    cfg,
 		Store:     s,
+		Git:       gs,
 		Discovery: discovery.New(f),
 		Mirror:    mirror.New(f, s),
 		Fetcher:   f,
@@ -53,8 +60,18 @@ type SiteInfo struct {
 // SyncResult wraps the mirror result with config updates.
 type SyncResult struct {
 	mirror.SyncResult
-	SyncTime time.Time `json:"sync_time"`
+	SyncTime  time.Time `json:"sync_time"`
+	Committed bool      `json:"committed"`
 }
+
+// CheckResult reports what would change without downloading.
+type CheckResult struct {
+	Domain    string   `json:"domain"`
+	Available []string `json:"available"` // Files that exist remotely
+}
+
+// ChangeEntry is a git log entry.
+type ChangeEntry = store.LogEntry
 
 // Init adds a new site to track. It probes for content but does not download yet.
 func (e *Engine) Init(ctx context.Context, rawURL string) (*SiteInfo, error) {
@@ -117,9 +134,17 @@ func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
 		return nil, fmt.Errorf("saving config: %w", err)
 	}
 
+	// Auto-commit changes
+	commitMsg := fmt.Sprintf("sync %s: %d files", domain, len(mr.Added))
+	committed, err := e.Git.Commit(commitMsg)
+	if err != nil {
+		return nil, fmt.Errorf("committing changes for %s: %w", domain, err)
+	}
+
 	return &SyncResult{
 		SyncResult: *mr,
 		SyncTime:   now,
+		Committed:  committed,
 	}, nil
 }
 
@@ -180,4 +205,43 @@ func (e *Engine) List(ctx context.Context) ([]SiteInfo, error) {
 		})
 	}
 	return sites, nil
+}
+
+// Check probes a site for available content without downloading (dry-run).
+func (e *Engine) Check(ctx context.Context, domain string) (*CheckResult, error) {
+	siteCfg, ok := e.Config.Sites[domain]
+	if !ok {
+		return nil, fmt.Errorf("site %q not tracked", domain)
+	}
+
+	result, err := e.Discovery.Discover(ctx, siteCfg.URL)
+	if err != nil {
+		return nil, fmt.Errorf("discovering content for %s: %w", domain, err)
+	}
+
+	var paths []string
+	for _, f := range result.Files {
+		paths = append(paths, f.Path)
+	}
+
+	return &CheckResult{
+		Domain:    domain,
+		Available: paths,
+	}, nil
+}
+
+// History returns recent change entries from git, optionally filtered to a site.
+func (e *Engine) History(ctx context.Context, site string, limit int) ([]ChangeEntry, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	return e.Git.Log(site, limit)
+}
+
+// Diff returns the diff between two git refs.
+func (e *Engine) Diff(ctx context.Context, from, to string) (string, error) {
+	if to == "" {
+		to = "HEAD"
+	}
+	return e.Git.Diff(from, to)
 }
