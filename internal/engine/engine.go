@@ -17,6 +17,7 @@ type Engine struct {
 	Config    *config.Config
 	Store     *store.Store
 	Git       *store.GitStore
+	Index     *store.Index
 	Discovery *discovery.Discoverer
 	Mirror    *mirror.Mirror
 	Fetcher   *fetcher.Fetcher
@@ -38,10 +39,16 @@ func New(rootDir string) (*Engine, error) {
 		return nil, fmt.Errorf("initializing git: %w", err)
 	}
 
+	idx, err := store.OpenIndex(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("opening search index: %w", err)
+	}
+
 	return &Engine{
 		Config:    cfg,
 		Store:     s,
 		Git:       gs,
+		Index:     idx,
 		Discovery: discovery.New(f),
 		Mirror:    mirror.New(f, s),
 		Fetcher:   f,
@@ -125,6 +132,15 @@ func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
 	mr, err := e.Mirror.Sync(ctx, result)
 	if err != nil {
 		return nil, fmt.Errorf("syncing %s: %w", domain, err)
+	}
+
+	// Update search index for synced files
+	for _, file := range result.Files {
+		body, readErr := e.Store.ReadContent(domain, file.Path)
+		if readErr != nil {
+			continue
+		}
+		_ = e.Index.IndexFile(domain, file.Path, string(file.ContentType), string(body))
 	}
 
 	// Update config with sync time
@@ -244,4 +260,26 @@ func (e *Engine) Diff(ctx context.Context, from, to string) (string, error) {
 		to = "HEAD"
 	}
 	return e.Git.Diff(from, to)
+}
+
+// SearchHit re-exports store.SearchHit.
+type SearchHit = store.SearchHit
+
+// Search performs a full-text search across indexed content.
+func (e *Engine) Search(ctx context.Context, query string, site, contentType string, limit int) ([]SearchHit, error) {
+	return e.Index.Search(query, store.SearchOpts{
+		Site:        site,
+		ContentType: contentType,
+		Limit:       limit,
+	})
+}
+
+// RebuildIndex rebuilds the search index from files on disk.
+func (e *Engine) RebuildIndex(ctx context.Context) error {
+	return e.Index.Rebuild(e.Store)
+}
+
+// Close releases resources held by the engine.
+func (e *Engine) Close() error {
+	return e.Index.Close()
 }

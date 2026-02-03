@@ -68,6 +68,15 @@ func (s *Store) WriteContent(domain, urlPath string, data []byte) (string, error
 	return dest, nil
 }
 
+// ReadContent reads a file from a site's directory by its URL path.
+func (s *Store) ReadContent(domain, urlPath string) ([]byte, error) {
+	clean := strings.TrimPrefix(urlPath, "/")
+	if clean == "" {
+		clean = "index.txt"
+	}
+	return os.ReadFile(filepath.Join(s.SiteDir(domain), clean))
+}
+
 // WriteMeta writes a JSON metadata file to the site's _meta directory.
 func (s *Store) WriteMeta(domain, name string, v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
