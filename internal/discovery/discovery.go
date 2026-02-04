@@ -5,16 +5,19 @@ import (
 	"time"
 
 	"github.com/dmoose/llmshadow/internal/fetcher"
+	"github.com/dmoose/llmshadow/internal/robots"
 )
 
 // ContentType classifies discovered content.
 type ContentType string
 
 const (
-	TypeLLMSTxt    ContentType = "llms-txt"
-	TypeLLMSFull   ContentType = "llms-full-txt"
-	TypeAITxt      ContentType = "ai-txt"
-	TypeCompanion  ContentType = "companion"
+	TypeLLMSTxt   ContentType = "llms-txt"
+	TypeLLMSFull  ContentType = "llms-full-txt"
+	TypeAITxt     ContentType = "ai-txt"
+	TypeCompanion ContentType = "companion"
+	TypeTDMRep    ContentType = "tdmrep"
+	TypeWellKnown ContentType = "well-known"
 )
 
 // DiscoveredFile represents a single piece of discovered LLM content.
@@ -37,11 +40,12 @@ type Result struct {
 // Discoverer probes a site for LLM-targeted content.
 type Discoverer struct {
 	Fetcher *fetcher.Fetcher
+	Robots  *robots.Checker // nil = don't check robots.txt
 }
 
 // New creates a Discoverer.
-func New(f *fetcher.Fetcher) *Discoverer {
-	return &Discoverer{Fetcher: f}
+func New(f *fetcher.Fetcher, robotsChecker *robots.Checker) *Discoverer {
+	return &Discoverer{Fetcher: f, Robots: robotsChecker}
 }
 
 // Discover probes a site for all LLM content.

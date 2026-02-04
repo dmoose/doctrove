@@ -47,6 +47,12 @@ func (m *Mirror) Sync(ctx context.Context, result *discovery.Result) (*SyncResul
 			continue
 		}
 
+		// Final Content-Type validation at download time
+		if fetcher.IsHTML(resp.ContentType, resp.Body) {
+			sr.Errors = append(sr.Errors, fmt.Sprintf("%s: rejected (HTML content)", file.Path))
+			continue
+		}
+
 		content := string(resp.Body)
 
 		// Rewrite internal links to local paths

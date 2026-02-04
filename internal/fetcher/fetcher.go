@@ -1,10 +1,12 @@
 package fetcher
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,10 +29,11 @@ type Fetcher struct {
 
 // Response holds the result of a fetch.
 type Response struct {
-	StatusCode int
-	Body       []byte
-	ETag       string
-	URL        string
+	StatusCode  int
+	Body        []byte
+	ETag        string
+	URL         string
+	ContentType string // raw Content-Type header value
 }
 
 // New creates a Fetcher with default settings.
@@ -76,10 +79,11 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (*Response, error) {
 	}
 
 	return &Response{
-		StatusCode: resp.StatusCode,
-		Body:       body,
-		ETag:       resp.Header.Get("ETag"),
-		URL:        url,
+		StatusCode:  resp.StatusCode,
+		Body:        body,
+		ETag:        resp.Header.Get("ETag"),
+		URL:         url,
+		ContentType: resp.Header.Get("Content-Type"),
 	}, nil
 }
 
@@ -128,4 +132,22 @@ func indexOfFrom(s string, c byte, from int) int {
 		}
 	}
 	return -1
+}
+
+// IsHTML returns true if the response looks like an HTML page rather than
+// text/markdown content. Checks both Content-Type header and body sniffing.
+func IsHTML(contentType string, body []byte) bool {
+	ct := strings.ToLower(contentType)
+	if strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml") {
+		return true
+	}
+	// Sniff the body for HTML markers (some servers lie about Content-Type)
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 {
+		return false
+	}
+	lower := bytes.ToLower(trimmed[:min(len(trimmed), 256)])
+	return bytes.HasPrefix(lower, []byte("<!doctype")) ||
+		bytes.HasPrefix(lower, []byte("<html")) ||
+		bytes.HasPrefix(lower, []byte("<head"))
 }

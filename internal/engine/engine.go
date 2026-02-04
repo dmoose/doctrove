@@ -9,6 +9,7 @@ import (
 	"github.com/dmoose/llmshadow/internal/discovery"
 	"github.com/dmoose/llmshadow/internal/fetcher"
 	"github.com/dmoose/llmshadow/internal/mirror"
+	"github.com/dmoose/llmshadow/internal/robots"
 	"github.com/dmoose/llmshadow/internal/store"
 )
 
@@ -24,8 +25,13 @@ type Engine struct {
 	RootDir   string
 }
 
+// Options configures engine behavior.
+type Options struct {
+	RespectRobots bool
+}
+
 // New creates an Engine rooted at the given directory.
-func New(rootDir string) (*Engine, error) {
+func New(rootDir string, opts ...Options) (*Engine, error) {
 	cfg, err := config.Load(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
@@ -44,12 +50,22 @@ func New(rootDir string) (*Engine, error) {
 		return nil, fmt.Errorf("opening search index: %w", err)
 	}
 
+	// Robots.txt checker — off by default
+	var o Options
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	var rc *robots.Checker
+	if o.RespectRobots {
+		rc = robots.New(f)
+	}
+
 	return &Engine{
 		Config:    cfg,
 		Store:     s,
 		Git:       gs,
 		Index:     idx,
-		Discovery: discovery.New(f),
+		Discovery: discovery.New(f, rc),
 		Mirror:    mirror.New(f, s),
 		Fetcher:   f,
 		RootDir:   rootDir,
