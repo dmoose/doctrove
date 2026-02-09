@@ -37,6 +37,10 @@ var searchCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(hits)
+		}
+
 		if len(hits) == 0 {
 			fmt.Println("No results.")
 			return nil

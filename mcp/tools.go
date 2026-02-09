@@ -221,6 +221,93 @@ func diffHandler(e *engine.Engine) server_handler {
 	}
 }
 
+// --- shadow_history ---
+
+func historyTool() gomcp.Tool {
+	return gomcp.NewTool("shadow_history",
+		gomcp.WithDescription("Show git change history, optionally filtered to a site"),
+		gomcp.WithString("site",
+			gomcp.Description("Filter to a specific domain"),
+		),
+		gomcp.WithNumber("limit",
+			gomcp.Description("Max entries to return (default 20)"),
+		),
+	)
+}
+
+func historyHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		site := stringArg(req, "site", "")
+		limit := intArg(req, "limit", 20)
+
+		entries, err := e.History(ctx, site, limit)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return jsonResult(entries)
+	}
+}
+
+// --- shadow_list_files ---
+
+func listFilesTool() gomcp.Tool {
+	return gomcp.NewTool("shadow_list_files",
+		gomcp.WithDescription("List all mirrored files for a site with path, size, and content type"),
+		gomcp.WithString("site",
+			gomcp.Required(),
+			gomcp.Description("The domain (e.g. stripe.com)"),
+		),
+	)
+}
+
+func listFilesHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		site := stringArg(req, "site", "")
+		if site == "" {
+			return gomcp.NewToolResultError("site is required"), nil
+		}
+
+		files, err := e.ListFiles(ctx, site)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return jsonResult(files)
+	}
+}
+
+// --- shadow_remove ---
+
+func removeTool() gomcp.Tool {
+	return gomcp.NewTool("shadow_remove",
+		gomcp.WithDescription("Stop tracking a site, remove files and index entries"),
+		gomcp.WithString("site",
+			gomcp.Required(),
+			gomcp.Description("The domain to remove (e.g. stripe.com)"),
+		),
+		gomcp.WithBoolean("keep_files",
+			gomcp.Description("Keep mirrored files on disk (default false)"),
+		),
+	)
+}
+
+func removeHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		site := stringArg(req, "site", "")
+		if site == "" {
+			return gomcp.NewToolResultError("site is required"), nil
+		}
+
+		keepFiles := boolArg(req, "keep_files", false)
+		if err := e.Remove(ctx, site, keepFiles); err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return jsonResult(map[string]string{"removed": site})
+	}
+}
+
 // --- helpers ---
 
 type server_handler = func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error)

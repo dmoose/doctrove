@@ -21,6 +21,10 @@ var checkCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(result)
+		}
+
 		if len(result.Available) == 0 {
 			fmt.Printf("No LLM content found for %s\n", result.Domain)
 			return nil

@@ -13,18 +13,14 @@ import (
 	"golang.org/x/time/rate"
 )
 
-const (
-	defaultUserAgent    = "llmshadow/0.1"
-	defaultRatePerHost  = 2 // requests per second per host
-	defaultBurstPerHost = 5
-	defaultTimeout      = 30 * time.Second
-)
-
 // Fetcher handles all HTTP requests with per-domain rate limiting.
 type Fetcher struct {
-	client   *http.Client
-	limiters map[string]*rate.Limiter
-	mu       sync.Mutex
+	client      *http.Client
+	limiters    map[string]*rate.Limiter
+	mu          sync.Mutex
+	userAgent   string
+	ratePerHost int
+	burstPerHost int
 }
 
 // Response holds the result of a fetch.
@@ -33,16 +29,39 @@ type Response struct {
 	Body        []byte
 	ETag        string
 	URL         string
-	ContentType string // raw Content-Type header value
+	ContentType string
 }
 
-// New creates a Fetcher with default settings.
-func New() *Fetcher {
+// Options configures the Fetcher.
+type Options struct {
+	UserAgent   string
+	RatePerHost int
+	BurstPerHost int
+	Timeout     time.Duration
+}
+
+// New creates a Fetcher with the given options.
+func New(opts Options) *Fetcher {
+	if opts.UserAgent == "" {
+		opts.UserAgent = "llmshadow/0.1"
+	}
+	if opts.RatePerHost <= 0 {
+		opts.RatePerHost = 2
+	}
+	if opts.BurstPerHost <= 0 {
+		opts.BurstPerHost = 5
+	}
+	if opts.Timeout <= 0 {
+		opts.Timeout = 30 * time.Second
+	}
 	return &Fetcher{
 		client: &http.Client{
-			Timeout: defaultTimeout,
+			Timeout: opts.Timeout,
 		},
-		limiters: make(map[string]*rate.Limiter),
+		limiters:    make(map[string]*rate.Limiter),
+		userAgent:   opts.UserAgent,
+		ratePerHost: opts.RatePerHost,
+		burstPerHost: opts.BurstPerHost,
 	}
 }
 
@@ -57,7 +76,7 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (*Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
-	req.Header.Set("User-Agent", defaultUserAgent)
+	req.Header.Set("User-Agent", f.userAgent)
 
 	resp, err := f.client.Do(req)
 	if err != nil {
@@ -88,7 +107,6 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (*Response, error) {
 }
 
 func (f *Fetcher) limiterFor(rawURL string) *rate.Limiter {
-	// Extract host from URL for per-domain limiting
 	host := extractHost(rawURL)
 
 	f.mu.Lock()
@@ -97,41 +115,21 @@ func (f *Fetcher) limiterFor(rawURL string) *rate.Limiter {
 	if lim, ok := f.limiters[host]; ok {
 		return lim
 	}
-	lim := rate.NewLimiter(rate.Limit(defaultRatePerHost), defaultBurstPerHost)
+	lim := rate.NewLimiter(rate.Limit(f.ratePerHost), f.burstPerHost)
 	f.limiters[host] = lim
 	return lim
 }
 
 func extractHost(rawURL string) string {
-	// Simple extraction — just find the host portion
-	// Avoid importing net/url for this hot path
 	start := 0
-	if i := indexOf(rawURL, "://"); i >= 0 {
+	if i := strings.Index(rawURL, "://"); i >= 0 {
 		start = i + 3
 	}
 	end := len(rawURL)
-	if i := indexOfFrom(rawURL, '/', start); i >= 0 {
-		end = i
+	if i := strings.IndexByte(rawURL[start:], '/'); i >= 0 {
+		end = start + i
 	}
 	return rawURL[start:end]
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
-func indexOfFrom(s string, c byte, from int) int {
-	for i := from; i < len(s); i++ {
-		if s[i] == c {
-			return i
-		}
-	}
-	return -1
 }
 
 // IsHTML returns true if the response looks like an HTML page rather than
@@ -141,7 +139,6 @@ func IsHTML(contentType string, body []byte) bool {
 	if strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml") {
 		return true
 	}
-	// Sniff the body for HTML markers (some servers lie about Content-Type)
 	trimmed := bytes.TrimSpace(body)
 	if len(trimmed) == 0 {
 		return false

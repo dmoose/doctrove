@@ -39,13 +39,17 @@ type Result struct {
 
 // Discoverer probes a site for LLM-targeted content.
 type Discoverer struct {
-	Fetcher *fetcher.Fetcher
-	Robots  *robots.Checker // nil = don't check robots.txt
+	Fetcher   *fetcher.Fetcher
+	Robots    *robots.Checker // nil = don't check robots.txt
+	MaxProbes int             // max companion probes per llms.txt (0 = default 100)
 }
 
 // New creates a Discoverer.
-func New(f *fetcher.Fetcher, robotsChecker *robots.Checker) *Discoverer {
-	return &Discoverer{Fetcher: f, Robots: robotsChecker}
+func New(f *fetcher.Fetcher, robotsChecker *robots.Checker, maxProbes int) *Discoverer {
+	if maxProbes <= 0 {
+		maxProbes = 100
+	}
+	return &Discoverer{Fetcher: f, Robots: robotsChecker, MaxProbes: maxProbes}
 }
 
 // Discover probes a site for all LLM content.

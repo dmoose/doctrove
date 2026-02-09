@@ -1,9 +1,7 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -30,10 +28,8 @@ var listCmd = &cobra.Command{
 			return nil
 		}
 
-		if listFormat == "json" {
-			enc := json.NewEncoder(os.Stdout)
-			enc.SetIndent("", "  ")
-			return enc.Encode(sites)
+		if listFormat == "json" || jsonOutput {
+			return printJSON(sites)
 		}
 
 		for _, s := range sites {

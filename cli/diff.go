@@ -31,6 +31,10 @@ var diffCmd = &cobra.Command{
 			return err
 		}
 
+		if jsonOutput {
+			return printJSON(map[string]string{"diff": diff})
+		}
+
 		if diff == "" {
 			fmt.Println("No changes.")
 			return nil

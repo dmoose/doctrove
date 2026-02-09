@@ -8,7 +8,7 @@ import (
 	"github.com/dmoose/llmshadow/internal/fetcher"
 )
 
-const maxCompanionProbes = 100 // cap on URLs to probe per llms.txt
+// maxCompanionProbes default; overridden by Discoverer.MaxProbes
 
 // parseCompanions parses an llms.txt file to find referenced companion files.
 // Markdown links are followed permissively (same-domain links in llms.txt are
@@ -31,7 +31,7 @@ func (d *Discoverer) parseCompanions(ctx context.Context, baseURL string, llmsTx
 		line := scanner.Text()
 		urls := extractURLs(line, baseURL)
 		for _, u := range urls {
-			if probes >= maxCompanionProbes {
+			if probes >= d.MaxProbes {
 				return found
 			}
 			if seen[u.path] {

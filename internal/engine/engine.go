@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/dmoose/llmshadow/internal/config"
@@ -37,7 +39,12 @@ func New(rootDir string, opts ...Options) (*Engine, error) {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
-	f := fetcher.New()
+	f := fetcher.New(fetcher.Options{
+		UserAgent:    cfg.Settings.UserAgent,
+		RatePerHost:  cfg.Settings.RateLimit,
+		BurstPerHost: cfg.Settings.RateBurst,
+		Timeout:      cfg.Settings.TimeoutDuration(),
+	})
 	s := store.New(rootDir)
 
 	gs, err := store.InitGit(rootDir)
@@ -50,7 +57,6 @@ func New(rootDir string, opts ...Options) (*Engine, error) {
 		return nil, fmt.Errorf("opening search index: %w", err)
 	}
 
-	// Robots.txt checker — off by default
 	var o Options
 	if len(opts) > 0 {
 		o = opts[0]
@@ -65,7 +71,7 @@ func New(rootDir string, opts ...Options) (*Engine, error) {
 		Store:     s,
 		Git:       gs,
 		Index:     idx,
-		Discovery: discovery.New(f, rc),
+		Discovery: discovery.New(f, rc, cfg.Settings.MaxProbes),
 		Mirror:    mirror.New(f, s),
 		Fetcher:   f,
 		RootDir:   rootDir,
@@ -90,36 +96,38 @@ type SyncResult struct {
 // CheckResult reports what would change without downloading.
 type CheckResult struct {
 	Domain    string   `json:"domain"`
-	Available []string `json:"available"` // Files that exist remotely
+	Available []string `json:"available"`
 }
 
 // ChangeEntry is a git log entry.
 type ChangeEntry = store.LogEntry
 
+// FileEntry describes a file in a site's mirror.
+type FileEntry struct {
+	Path        string `json:"path"`
+	Size        int64  `json:"size"`
+	ContentType string `json:"content_type"`
+}
+
 // Init adds a new site to track. It probes for content but does not download yet.
 func (e *Engine) Init(ctx context.Context, rawURL string) (*SiteInfo, error) {
-	// Normalize URL
 	if rawURL[len(rawURL)-1] == '/' {
 		rawURL = rawURL[:len(rawURL)-1]
 	}
 
-	// Discover to validate the site has LLM content
 	result, err := e.Discovery.Discover(ctx, rawURL)
 	if err != nil {
 		return nil, fmt.Errorf("discovering content: %w", err)
 	}
 
-	// Add to config
 	if err := e.Config.AddSite(result.Domain, rawURL); err != nil {
 		return nil, err
 	}
 
-	// Create directory structure
 	if err := e.Store.EnsureSiteDir(result.Domain); err != nil {
 		return nil, fmt.Errorf("creating site directory: %w", err)
 	}
 
-	// Save config
 	if err := e.Config.Save(); err != nil {
 		return nil, fmt.Errorf("saving config: %w", err)
 	}
@@ -138,14 +146,15 @@ func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
 		return nil, fmt.Errorf("site %q not tracked — run init first", domain)
 	}
 
-	// Discover current content
 	result, err := e.Discovery.Discover(ctx, siteCfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("discovering content for %s: %w", domain, err)
 	}
 
-	// Mirror the content
-	mr, err := e.Mirror.Sync(ctx, result)
+	// Build include/exclude filter from site config
+	filter := mirror.BuildFilter(siteCfg.Include, siteCfg.Exclude)
+
+	mr, err := e.Mirror.Sync(ctx, result, filter)
 	if err != nil {
 		return nil, fmt.Errorf("syncing %s: %w", domain, err)
 	}
@@ -159,14 +168,12 @@ func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
 		_ = e.Index.IndexFile(domain, file.Path, string(file.ContentType), string(body))
 	}
 
-	// Update config with sync time
 	now := time.Now()
 	e.Config.UpdateLastSync(domain, now)
 	if err := e.Config.Save(); err != nil {
 		return nil, fmt.Errorf("saving config: %w", err)
 	}
 
-	// Auto-commit changes
 	commitMsg := fmt.Sprintf("sync %s: %d files", domain, len(mr.Added))
 	committed, err := e.Git.Commit(commitMsg)
 	if err != nil {
@@ -293,6 +300,68 @@ func (e *Engine) Search(ctx context.Context, query string, site, contentType str
 // RebuildIndex rebuilds the search index from files on disk.
 func (e *Engine) RebuildIndex(ctx context.Context) error {
 	return e.Index.Rebuild(e.Store)
+}
+
+// ListFiles returns all content files for a tracked site.
+func (e *Engine) ListFiles(ctx context.Context, domain string) ([]FileEntry, error) {
+	if _, ok := e.Config.Sites[domain]; !ok {
+		return nil, fmt.Errorf("site %q not tracked", domain)
+	}
+
+	siteDir := e.Store.SiteDir(domain)
+	var files []FileEntry
+	err := filepath.Walk(siteDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if info.Name() == "_meta" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, _ := filepath.Rel(siteDir, path)
+		urlPath := "/" + rel
+		files = append(files, FileEntry{
+			Path:        urlPath,
+			Size:        info.Size(),
+			ContentType: store.ClassifyPath(urlPath),
+		})
+		return nil
+	})
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("listing files for %s: %w", domain, err)
+	}
+	return files, nil
+}
+
+// Remove untracks a site, optionally deleting its files.
+func (e *Engine) Remove(ctx context.Context, domain string, keepFiles bool) error {
+	if err := e.Config.RemoveSite(domain); err != nil {
+		return err
+	}
+
+	if !keepFiles {
+		siteDir := e.Store.SiteDir(domain)
+		if err := os.RemoveAll(siteDir); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("removing files for %s: %w", domain, err)
+		}
+	}
+
+	// Clean search index
+	_ = e.Index.DeleteSite(domain)
+
+	if err := e.Config.Save(); err != nil {
+		return fmt.Errorf("saving config: %w", err)
+	}
+
+	commitMsg := fmt.Sprintf("remove %s", domain)
+	_, _ = e.Git.Commit(commitMsg)
+
+	return nil
 }
 
 // Close releases resources held by the engine.

@@ -222,6 +222,20 @@ func (idx *Index) Close() error {
 	return idx.db.Close()
 }
 
+// DeleteSite removes all index entries for a domain.
+func (idx *Index) DeleteSite(domain string) error {
+	if _, err := idx.db.Exec("DELETE FROM content WHERE domain = ?", domain); err != nil {
+		return err
+	}
+	_, err := idx.db.Exec("DELETE FROM content_meta WHERE domain = ?", domain)
+	return err
+}
+
+// ClassifyPath returns a content type string for a URL path.
+func ClassifyPath(path string) string {
+	return classifyPath(path)
+}
+
 func classifyPath(path string) string {
 	lower := strings.ToLower(path)
 	switch {

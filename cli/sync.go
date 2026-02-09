@@ -27,6 +27,9 @@ var syncCmd = &cobra.Command{
 				fmt.Println("No sites tracked. Run 'llmshadow init <url>' first.")
 				return nil
 			}
+			if jsonOutput {
+				return printJSON(results)
+			}
 			for _, r := range results {
 				printSyncResult(r.Domain, r.Added, r.Errors)
 			}
@@ -36,6 +39,9 @@ var syncCmd = &cobra.Command{
 		r, err := e.Sync(cmd.Context(), args[0])
 		if err != nil {
 			return err
+		}
+		if jsonOutput {
+			return printJSON(r)
 		}
 		printSyncResult(r.Domain, r.Added, r.Errors)
 		return nil

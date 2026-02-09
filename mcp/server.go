@@ -37,6 +37,22 @@ func registerTools(s *server.MCPServer, e *engine.Engine) {
 	s.AddTool(readTool(), readHandler(e))
 	s.AddTool(statusTool(), statusHandler(e))
 	s.AddTool(diffTool(), diffHandler(e))
+	s.AddTool(historyTool(), historyHandler(e))
+	s.AddTool(listFilesTool(), listFilesHandler(e))
+	s.AddTool(removeTool(), removeHandler(e))
+}
+
+// helper to pull a bool arg with a default
+func boolArg(req gomcp.CallToolRequest, key string, def bool) bool {
+	v, ok := req.GetArguments()[key]
+	if !ok {
+		return def
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return def
+	}
+	return b
 }
 
 // helper to pull a string arg with a default

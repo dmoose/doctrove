@@ -12,8 +12,37 @@ import (
 const DefaultConfigFile = "llmshadow.yaml"
 
 type Config struct {
-	Sites map[string]*SiteConfig `yaml:"sites"`
-	path  string
+	Settings *Settings               `yaml:"settings,omitempty"`
+	Sites    map[string]*SiteConfig  `yaml:"sites"`
+	path     string
+}
+
+type Settings struct {
+	RateLimit  int    `yaml:"rate_limit,omitempty"`  // requests/sec per host
+	RateBurst  int    `yaml:"rate_burst,omitempty"`  // burst capacity
+	Timeout    string `yaml:"timeout,omitempty"`     // HTTP timeout (e.g. "30s")
+	MaxProbes  int    `yaml:"max_probes,omitempty"`  // companion probes per llms.txt
+	UserAgent  string `yaml:"user_agent,omitempty"`  // User-Agent header
+}
+
+// DefaultSettings returns settings with sane defaults.
+func DefaultSettings() *Settings {
+	return &Settings{
+		RateLimit: 2,
+		RateBurst: 5,
+		Timeout:   "30s",
+		MaxProbes: 100,
+		UserAgent: "llmshadow/0.1",
+	}
+}
+
+// TimeoutDuration parses the Timeout string as a time.Duration.
+func (s *Settings) TimeoutDuration() time.Duration {
+	d, err := time.ParseDuration(s.Timeout)
+	if err != nil {
+		return 30 * time.Second
+	}
+	return d
 }
 
 type SiteConfig struct {
@@ -25,7 +54,7 @@ type SiteConfig struct {
 }
 
 // Load reads the config from the given root directory.
-// If the file doesn't exist, returns an empty config.
+// If the file doesn't exist, returns an empty config with default settings.
 func Load(rootDir string) (*Config, error) {
 	path := filepath.Join(rootDir, DefaultConfigFile)
 	cfg := &Config{
@@ -36,6 +65,7 @@ func Load(rootDir string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			cfg.Settings = DefaultSettings()
 			return cfg, nil
 		}
 		return nil, fmt.Errorf("reading config: %w", err)
@@ -47,8 +77,33 @@ func Load(rootDir string) (*Config, error) {
 	if cfg.Sites == nil {
 		cfg.Sites = make(map[string]*SiteConfig)
 	}
+	cfg.Settings = mergeSettings(cfg.Settings)
 	cfg.path = path
 	return cfg, nil
+}
+
+// mergeSettings fills zero-value fields from defaults.
+func mergeSettings(s *Settings) *Settings {
+	defaults := DefaultSettings()
+	if s == nil {
+		return defaults
+	}
+	if s.RateLimit <= 0 {
+		s.RateLimit = defaults.RateLimit
+	}
+	if s.RateBurst <= 0 {
+		s.RateBurst = defaults.RateBurst
+	}
+	if s.Timeout == "" {
+		s.Timeout = defaults.Timeout
+	}
+	if s.MaxProbes <= 0 {
+		s.MaxProbes = defaults.MaxProbes
+	}
+	if s.UserAgent == "" {
+		s.UserAgent = defaults.UserAgent
+	}
+	return s
 }
 
 // Save writes the config back to disk.
@@ -68,6 +123,15 @@ func (c *Config) AddSite(domain, url string) error {
 	c.Sites[domain] = &SiteConfig{
 		URL: url,
 	}
+	return nil
+}
+
+// RemoveSite removes a site from the config.
+func (c *Config) RemoveSite(domain string) error {
+	if _, exists := c.Sites[domain]; !exists {
+		return fmt.Errorf("site %q not tracked", domain)
+	}
+	delete(c.Sites, domain)
 	return nil
 }
 

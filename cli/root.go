@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -11,6 +12,7 @@ import (
 var (
 	rootDir       string
 	respectRobots bool
+	jsonOutput    bool
 )
 
 var rootCmd = &cobra.Command{
@@ -22,6 +24,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&rootDir, "dir", "d", ".", "root directory for the llmshadow workspace")
 	rootCmd.PersistentFlags().BoolVar(&respectRobots, "respect-robots", false, "respect robots.txt AI crawler directives")
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "output results as JSON")
 }
 
 // Execute runs the root command.
@@ -40,4 +43,11 @@ func newEngine() (*engine.Engine, error) {
 		return nil, fmt.Errorf("initializing: %w", err)
 	}
 	return e, nil
+}
+
+// printJSON marshals v as indented JSON to stdout.
+func printJSON(v any) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(v)
 }

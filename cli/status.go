@@ -22,6 +22,9 @@ var statusCmd = &cobra.Command{
 			if err != nil {
 				return err
 			}
+			if jsonOutput {
+				return printJSON(info)
+			}
 			printSiteInfo(info)
 			return nil
 		}
@@ -33,6 +36,9 @@ var statusCmd = &cobra.Command{
 		if len(sites) == 0 {
 			fmt.Println("No sites tracked. Run 'llmshadow init <url>' first.")
 			return nil
+		}
+		if jsonOutput {
+			return printJSON(sites)
 		}
 		for _, s := range sites {
 			printSiteInfo(&s)
