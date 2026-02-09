@@ -48,16 +48,23 @@ func (d *Discoverer) parseCompanions(ctx context.Context, baseURL string, llmsTx
 			if err != nil || resp == nil {
 				continue
 			}
-			// Reject HTML pages masquerading as content
-			if fetcher.IsHTML(resp.ContentType, resp.Body) {
-				continue
+			// If HTML, try converting to markdown
+			body := resp.Body
+			foundVia := "llms.txt reference"
+			if fetcher.IsHTML(resp.ContentType, body) {
+				md, err := fetcher.ConvertHTML(string(body))
+				if err != nil || len(strings.TrimSpace(md)) < 50 {
+					continue
+				}
+				body = []byte(md)
+				foundVia = "llms.txt reference (html-to-md)"
 			}
 			found = append(found, DiscoveredFile{
 				URL:         u.full,
 				Path:        u.path,
 				ContentType: TypeCompanion,
-				Size:        len(resp.Body),
-				FoundVia:    "llms.txt reference",
+				Size:        len(body),
+				FoundVia:    foundVia,
 			})
 		}
 	}

@@ -85,12 +85,17 @@ func (m *Mirror) Sync(ctx context.Context, result *discovery.Result, filter Filt
 			continue
 		}
 
-		if fetcher.IsHTML(resp.ContentType, resp.Body) {
-			sr.Errors = append(sr.Errors, fmt.Sprintf("%s: rejected (HTML content)", file.Path))
-			continue
-		}
-
 		content := string(resp.Body)
+
+		// Convert HTML to markdown if needed
+		if fetcher.IsHTML(resp.ContentType, resp.Body) {
+			md, convErr := fetcher.ConvertHTML(content)
+			if convErr != nil || len(md) < 50 {
+				sr.Errors = append(sr.Errors, fmt.Sprintf("%s: rejected (HTML, conversion failed)", file.Path))
+				continue
+			}
+			content = md
+		}
 		content = RewriteLinks(content, result.BaseURL)
 
 		_, err = m.Store.WriteContent(result.Domain, file.Path, []byte(content))

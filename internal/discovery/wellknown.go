@@ -36,16 +36,23 @@ func (d *Discoverer) probeWellKnown(ctx context.Context, baseURL string) []Disco
 		if err != nil || resp == nil {
 			continue
 		}
-		// Reject HTML pages masquerading as text content
-		if !wk.AllowJSON && fetcher.IsHTML(resp.ContentType, resp.Body) {
-			continue
+		// If HTML at a content URL, convert to markdown
+		body := resp.Body
+		foundVia := "well-known"
+		if !wk.AllowJSON && fetcher.IsHTML(resp.ContentType, body) {
+			md, err := fetcher.ConvertHTML(string(body))
+			if err != nil || len(strings.TrimSpace(md)) < 50 {
+				continue // conversion failed or produced trivial content
+			}
+			body = []byte(md)
+			foundVia = "well-known (html-to-md)"
 		}
 		found = append(found, DiscoveredFile{
 			URL:         url,
 			Path:        wk.Path,
 			ContentType: wk.Type,
-			Size:        len(resp.Body),
-			FoundVia:    "well-known",
+			Size:        len(body),
+			FoundVia:    foundVia,
 		})
 	}
 

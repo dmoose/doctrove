@@ -308,6 +308,42 @@ func removeHandler(e *engine.Engine) server_handler {
 	}
 }
 
+// --- shadow_catalog ---
+
+func catalogTool() gomcp.Tool {
+	return gomcp.NewTool("shadow_catalog",
+		gomcp.WithDescription("Get a compact summary of all tracked sites with titles, descriptions, and topic areas — use this to find which site has docs for a topic"),
+	)
+}
+
+func catalogHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		entries, err := e.Catalog(ctx)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+		return jsonResult(entries)
+	}
+}
+
+// --- shadow_stats ---
+
+func statsTool() gomcp.Tool {
+	return gomcp.NewTool("shadow_stats",
+		gomcp.WithDescription("Get workspace statistics: total sites, files, disk usage, and sync freshness"),
+	)
+}
+
+func statsHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		stats, err := e.Stats(ctx)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+		return jsonResult(stats)
+	}
+}
+
 // --- helpers ---
 
 type server_handler = func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error)

@@ -40,6 +40,8 @@ func registerTools(s *server.MCPServer, e *engine.Engine) {
 	s.AddTool(historyTool(), historyHandler(e))
 	s.AddTool(listFilesTool(), listFilesHandler(e))
 	s.AddTool(removeTool(), removeHandler(e))
+	s.AddTool(catalogTool(), catalogHandler(e))
+	s.AddTool(statsTool(), statsHandler(e))
 }
 
 // helper to pull a bool arg with a default
