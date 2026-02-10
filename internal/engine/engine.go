@@ -9,6 +9,7 @@ import (
 
 	"github.com/dmoose/llmshadow/internal/config"
 	"github.com/dmoose/llmshadow/internal/discovery"
+	"github.com/dmoose/llmshadow/internal/events"
 	"github.com/dmoose/llmshadow/internal/fetcher"
 	"github.com/dmoose/llmshadow/internal/mirror"
 	"github.com/dmoose/llmshadow/internal/robots"
@@ -24,6 +25,7 @@ type Engine struct {
 	Discovery *discovery.Discoverer
 	Mirror    *mirror.Mirror
 	Fetcher   *fetcher.Fetcher
+	Events    *events.Emitter
 	RootDir   string
 }
 
@@ -66,6 +68,8 @@ func New(rootDir string, opts ...Options) (*Engine, error) {
 		rc = robots.New(f)
 	}
 
+	em := events.New(cfg.Settings.EventsURL, "llmshadow")
+
 	return &Engine{
 		Config:    cfg,
 		Store:     s,
@@ -74,6 +78,7 @@ func New(rootDir string, opts ...Options) (*Engine, error) {
 		Discovery: discovery.New(f, rc, cfg.Settings.MaxProbes),
 		Mirror:    mirror.New(f, s),
 		Fetcher:   f,
+		Events:    em,
 		RootDir:   rootDir,
 	}, nil
 }
@@ -132,11 +137,13 @@ func (e *Engine) Init(ctx context.Context, rawURL string) (*SiteInfo, error) {
 		return nil, fmt.Errorf("saving config: %w", err)
 	}
 
-	return &SiteInfo{
+	info := &SiteInfo{
 		Domain:    result.Domain,
 		URL:       rawURL,
 		FileCount: len(result.Files),
-	}, nil
+	}
+	e.Events.Emit("init", "cli", map[string]any{"domain": info.Domain, "files_found": info.FileCount})
+	return info, nil
 }
 
 // Sync downloads/updates content for a site.
@@ -180,11 +187,17 @@ func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
 		return nil, fmt.Errorf("committing changes for %s: %w", domain, err)
 	}
 
-	return &SyncResult{
+	sr := &SyncResult{
 		SyncResult: *mr,
 		SyncTime:   now,
 		Committed:  committed,
-	}, nil
+	}
+	e.Events.Emit("sync", "cli", map[string]any{
+		"domain":    domain,
+		"files":     len(mr.Added),
+		"errors":    len(mr.Errors),
+	})
+	return sr, nil
 }
 
 // SyncAll syncs all tracked sites.

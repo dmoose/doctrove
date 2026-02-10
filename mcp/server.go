@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/dmoose/llmshadow/internal/engine"
 	gomcp "github.com/mark3labs/mcp-go/mcp"
@@ -30,19 +32,44 @@ func Serve(e *engine.Engine) error {
 }
 
 func registerTools(s *server.MCPServer, e *engine.Engine) {
-	s.AddTool(discoverTool(), discoverHandler(e))
-	s.AddTool(scanTool(), scanHandler(e))
-	s.AddTool(searchTool(), searchHandler(e))
-	s.AddTool(searchFullTool(), searchFullHandler(e))
-	s.AddTool(listTool(), listHandler(e))
-	s.AddTool(readTool(), readHandler(e))
-	s.AddTool(statusTool(), statusHandler(e))
-	s.AddTool(diffTool(), diffHandler(e))
-	s.AddTool(historyTool(), historyHandler(e))
-	s.AddTool(listFilesTool(), listFilesHandler(e))
-	s.AddTool(removeTool(), removeHandler(e))
-	s.AddTool(catalogTool(), catalogHandler(e))
-	s.AddTool(statsTool(), statsHandler(e))
+	add := func(tool gomcp.Tool, handler server_handler) {
+		s.AddTool(tool, traced(e, tool.Name, handler))
+	}
+	add(discoverTool(), discoverHandler(e))
+	add(scanTool(), scanHandler(e))
+	add(searchTool(), searchHandler(e))
+	add(searchFullTool(), searchFullHandler(e))
+	add(listTool(), listHandler(e))
+	add(readTool(), readHandler(e))
+	add(statusTool(), statusHandler(e))
+	add(diffTool(), diffHandler(e))
+	add(historyTool(), historyHandler(e))
+	add(listFilesTool(), listFilesHandler(e))
+	add(removeTool(), removeHandler(e))
+	add(catalogTool(), catalogHandler(e))
+	add(statsTool(), statsHandler(e))
+}
+
+// traced wraps a tool handler to emit events to the relay.
+func traced(e *engine.Engine, toolName string, handler server_handler) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		start := time.Now()
+		agentID := stringArg(req, "agent_id", "")
+
+		result, err := handler(ctx, req)
+
+		data := map[string]any{
+			"tool":        toolName,
+			"duration_ms": time.Since(start).Milliseconds(),
+			"args":        req.GetArguments(),
+		}
+		if result != nil && result.IsError {
+			data["error"] = true
+		}
+
+		e.Events.Emit(toolName, agentID, data)
+		return result, err
+	}
 }
 
 // helper to pull a bool arg with a default
