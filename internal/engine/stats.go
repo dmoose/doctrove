@@ -97,6 +97,23 @@ func humanSize(b int64) string {
 	}
 }
 
+// Stale returns sites that haven't been synced within the given duration.
+func (e *Engine) Stale(ctx context.Context, threshold time.Duration) ([]SiteStats, error) {
+	stats, err := e.Stats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	cutoff := time.Now().Add(-threshold)
+	var stale []SiteStats
+	for _, s := range stats.SiteStats {
+		if s.LastSync.IsZero() || s.LastSync.Before(cutoff) {
+			stale = append(stale, s)
+		}
+	}
+	return stale, nil
+}
+
 func humanAge(d time.Duration) string {
 	switch {
 	case d < time.Minute:

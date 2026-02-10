@@ -12,12 +12,14 @@ import (
 type ContentType string
 
 const (
-	TypeLLMSTxt   ContentType = "llms-txt"
-	TypeLLMSFull  ContentType = "llms-full-txt"
-	TypeAITxt     ContentType = "ai-txt"
-	TypeCompanion ContentType = "companion"
-	TypeTDMRep    ContentType = "tdmrep"
-	TypeWellKnown ContentType = "well-known"
+	TypeLLMSTxt     ContentType = "llms-txt"
+	TypeLLMSFull    ContentType = "llms-full-txt"
+	TypeLLMSCtx     ContentType = "llms-ctx-txt"
+	TypeLLMSCtxFull ContentType = "llms-ctx-full-txt"
+	TypeAITxt       ContentType = "ai-txt"
+	TypeCompanion   ContentType = "companion"
+	TypeTDMRep      ContentType = "tdmrep"
+	TypeWellKnown   ContentType = "well-known"
 )
 
 // DiscoveredFile represents a single piece of discovered LLM content.
@@ -65,13 +67,26 @@ func (d *Discoverer) Discover(ctx context.Context, baseURL string) (*Result, err
 	wellKnown := d.probeWellKnown(ctx, baseURL)
 	result.Files = append(result.Files, wellKnown...)
 
+	// Build seen set from well-known results
+	seen := make(map[string]bool)
+	for _, f := range wellKnown {
+		seen[f.Path] = true
+	}
+
 	// Phase 2: parse llms.txt for companion file references
 	for _, f := range wellKnown {
 		if f.ContentType == TypeLLMSTxt {
 			companions := d.parseCompanions(ctx, baseURL, f)
+			for _, c := range companions {
+				seen[c.Path] = true
+			}
 			result.Files = append(result.Files, companions...)
 		}
 	}
+
+	// Phase 3: check sitemap for additional LLM content
+	sitemapFiles := d.probeSitemap(ctx, baseURL, seen)
+	result.Files = append(result.Files, sitemapFiles...)
 
 	return result, nil
 }

@@ -111,6 +111,43 @@ func searchHandler(e *engine.Engine) server_handler {
 	}
 }
 
+// --- shadow_search_full ---
+
+func searchFullTool() gomcp.Tool {
+	return gomcp.NewTool("shadow_search_full",
+		gomcp.WithDescription("Search and return the full content of the best matching file — use this when you need complete documentation, not just a snippet"),
+		gomcp.WithString("query",
+			gomcp.Required(),
+			gomcp.Description("Search query"),
+		),
+		gomcp.WithString("site",
+			gomcp.Description("Filter to a specific domain"),
+		),
+		gomcp.WithString("content_type",
+			gomcp.Description("Filter by content type"),
+		),
+	)
+}
+
+func searchFullHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		query := stringArg(req, "query", "")
+		if query == "" {
+			return gomcp.NewToolResultError("query is required"), nil
+		}
+
+		result, err := e.SearchFull(ctx, query,
+			stringArg(req, "site", ""),
+			stringArg(req, "content_type", ""),
+		)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return jsonResult(result)
+	}
+}
+
 // --- shadow_list ---
 
 func listTool() gomcp.Tool {
@@ -158,7 +195,19 @@ func readHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(fmt.Sprintf("reading %s%s: %v", site, path, err)), nil
 		}
 
-		return gomcp.NewToolResultText(string(data)), nil
+		// Include freshness metadata so the agent knows how current the content is
+		lastSync := "unknown"
+		if siteCfg, ok := e.Config.Sites[site]; ok && !siteCfg.LastSync.IsZero() {
+			lastSync = siteCfg.LastSync.Format("2006-01-02T15:04:05Z07:00")
+		}
+
+		return jsonResult(map[string]any{
+			"domain":    site,
+			"path":      path,
+			"size":      len(data),
+			"last_sync": lastSync,
+			"content":   string(data),
+		})
 	}
 }
 

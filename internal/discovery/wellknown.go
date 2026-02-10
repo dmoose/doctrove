@@ -15,6 +15,8 @@ var wellKnownPaths = []struct {
 }{
 	{"/llms.txt", TypeLLMSTxt, false},
 	{"/llms-full.txt", TypeLLMSFull, false},
+	{"/llms-ctx.txt", TypeLLMSCtx, false},
+	{"/llms-ctx-full.txt", TypeLLMSCtxFull, false},
 	{"/ai.txt", TypeAITxt, false},
 	{"/.well-known/tdmrep.json", TypeTDMRep, true},
 	{"/.well-known/agent.json", TypeWellKnown, true},

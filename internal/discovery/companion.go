@@ -184,7 +184,7 @@ func isWellKnownPath(raw, baseURL string) bool {
 	trimmed := strings.TrimPrefix(raw, baseURL)
 	trimmed = strings.TrimPrefix(trimmed, "/")
 	switch trimmed {
-	case "llms.txt", "llms-full.txt", "ai.txt":
+	case "llms.txt", "llms-full.txt", "llms-ctx.txt", "llms-ctx-full.txt", "ai.txt":
 		return true
 	}
 	return false

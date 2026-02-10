@@ -243,6 +243,10 @@ func classifyPath(path string) string {
 		return "llms-txt"
 	case strings.HasSuffix(lower, "/llms-full.txt") || lower == "/llms-full.txt":
 		return "llms-full-txt"
+	case strings.HasSuffix(lower, "/llms-ctx.txt") || lower == "/llms-ctx.txt":
+		return "llms-ctx-txt"
+	case strings.HasSuffix(lower, "/llms-ctx-full.txt") || lower == "/llms-ctx-full.txt":
+		return "llms-ctx-full-txt"
 	case strings.HasSuffix(lower, "/ai.txt") || lower == "/ai.txt":
 		return "ai-txt"
 	case strings.Contains(lower, "/.well-known/tdmrep"):

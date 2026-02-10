@@ -33,6 +33,7 @@ func registerTools(s *server.MCPServer, e *engine.Engine) {
 	s.AddTool(discoverTool(), discoverHandler(e))
 	s.AddTool(scanTool(), scanHandler(e))
 	s.AddTool(searchTool(), searchHandler(e))
+	s.AddTool(searchFullTool(), searchFullHandler(e))
 	s.AddTool(listTool(), listHandler(e))
 	s.AddTool(readTool(), readHandler(e))
 	s.AddTool(statusTool(), statusHandler(e))

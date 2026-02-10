@@ -288,13 +288,62 @@ func (e *Engine) Diff(ctx context.Context, from, to string) (string, error) {
 // SearchHit re-exports store.SearchHit.
 type SearchHit = store.SearchHit
 
+// SearchResult wraps search hits with metadata.
+type SearchResult struct {
+	Hits       []SearchHit `json:"results"`
+	Suggestion string      `json:"suggestion,omitempty"`
+}
+
 // Search performs a full-text search across indexed content.
-func (e *Engine) Search(ctx context.Context, query string, site, contentType string, limit int) ([]SearchHit, error) {
-	return e.Index.Search(query, store.SearchOpts{
+func (e *Engine) Search(ctx context.Context, query string, site, contentType string, limit int) (*SearchResult, error) {
+	hits, err := e.Index.Search(query, store.SearchOpts{
 		Site:        site,
 		ContentType: contentType,
 		Limit:       limit,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := &SearchResult{Hits: hits}
+	if len(hits) == 0 {
+		result.Suggestion = "No local results. Use shadow_discover to check if a URL has LLM content, or shadow_scan to add and sync a site."
+	}
+	return result, nil
+}
+
+// SearchFull searches and returns the full content of the top hit.
+func (e *Engine) SearchFull(ctx context.Context, query string, site, contentType string) (*SearchFullResult, error) {
+	sr, err := e.Search(ctx, query, site, contentType, 1)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &SearchFullResult{Suggestion: sr.Suggestion}
+	if len(sr.Hits) == 0 {
+		return result, nil
+	}
+
+	hit := sr.Hits[0]
+	body, err := e.Store.ReadContent(hit.Domain, hit.Path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s%s: %w", hit.Domain, hit.Path, err)
+	}
+
+	result.Domain = hit.Domain
+	result.Path = hit.Path
+	result.ContentType = hit.ContentType
+	result.Content = string(body)
+	return result, nil
+}
+
+// SearchFullResult contains the full content of the best search match.
+type SearchFullResult struct {
+	Domain      string `json:"domain,omitempty"`
+	Path        string `json:"path,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	Content     string `json:"content,omitempty"`
+	Suggestion  string `json:"suggestion,omitempty"`
 }
 
 // RebuildIndex rebuilds the search index from files on disk.

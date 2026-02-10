@@ -11,6 +11,7 @@ var (
 	searchContentType string
 	searchLimit       int
 	searchRebuild     bool
+	searchFull        bool
 )
 
 var searchCmd = &cobra.Command{
@@ -32,21 +33,46 @@ var searchCmd = &cobra.Command{
 		}
 
 		query := args[0]
-		hits, err := e.Search(cmd.Context(), query, searchSite, searchContentType, searchLimit)
+
+		// --full: return complete content of best match
+		if searchFull {
+			result, err := e.SearchFull(cmd.Context(), query, searchSite, searchContentType)
+			if err != nil {
+				return err
+			}
+			if jsonOutput {
+				return printJSON(result)
+			}
+			if result.Content == "" {
+				fmt.Println("No results.")
+				if result.Suggestion != "" {
+					fmt.Println(result.Suggestion)
+				}
+				return nil
+			}
+			fmt.Printf("--- %s %s [%s] ---\n\n", result.Domain, result.Path, result.ContentType)
+			fmt.Print(result.Content)
+			return nil
+		}
+
+		sr, err := e.Search(cmd.Context(), query, searchSite, searchContentType, searchLimit)
 		if err != nil {
 			return err
 		}
 
 		if jsonOutput {
-			return printJSON(hits)
+			return printJSON(sr)
 		}
 
-		if len(hits) == 0 {
+		if len(sr.Hits) == 0 {
 			fmt.Println("No results.")
+			if sr.Suggestion != "" {
+				fmt.Println(sr.Suggestion)
+			}
 			return nil
 		}
 
-		for _, h := range hits {
+		for _, h := range sr.Hits {
 			fmt.Printf("%s %s [%s]\n", h.Domain, h.Path, h.ContentType)
 			fmt.Printf("  %s\n\n", h.Snippet)
 		}
@@ -59,5 +85,6 @@ func init() {
 	searchCmd.Flags().StringVar(&searchContentType, "type", "", "filter by content type: llms-txt, companion, etc.")
 	searchCmd.Flags().IntVarP(&searchLimit, "limit", "n", 20, "max results")
 	searchCmd.Flags().BoolVar(&searchRebuild, "rebuild", false, "rebuild search index before searching")
+	searchCmd.Flags().BoolVar(&searchFull, "full", false, "return full content of the best match")
 	rootCmd.AddCommand(searchCmd)
 }
