@@ -428,5 +428,6 @@ func (e *Engine) Remove(ctx context.Context, domain string, keepFiles bool) erro
 
 // Close releases resources held by the engine.
 func (e *Engine) Close() error {
+	e.Events.Flush()
 	return e.Index.Close()
 }

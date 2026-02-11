@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,7 @@ type Emitter struct {
 	url    string
 	source string
 	client *http.Client
+	wg     sync.WaitGroup
 }
 
 // New creates an Emitter. If url is empty, returns a no-op emitter.
@@ -48,7 +50,16 @@ func (e *Emitter) Emit(action, agentID string, data map[string]any) {
 		Data:    data,
 		TS:      time.Now(),
 	}
-	go e.send(evt)
+	e.wg.Add(1)
+	go func() {
+		defer e.wg.Done()
+		e.send(evt)
+	}()
+}
+
+// Flush waits for all pending events to be sent.
+func (e *Emitter) Flush() {
+	e.wg.Wait()
 }
 
 func (e *Emitter) send(evt Event) {

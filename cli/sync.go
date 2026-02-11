@@ -17,6 +17,7 @@ var syncCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer e.Close()
 
 		if syncAll || len(args) == 0 {
 			results, err := e.SyncAll(cmd.Context())
