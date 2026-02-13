@@ -60,8 +60,8 @@ func parseLLMSTxt(content string) (title, description string, topics []string) {
 		}
 
 		// Blockquote — description
-		if strings.HasPrefix(trimmed, "> ") {
-			desc := strings.TrimPrefix(trimmed, "> ")
+		if after, ok := strings.CutPrefix(trimmed, "> "); ok {
+			desc := after
 			if inBlockquote {
 				description += " " + desc
 			} else {
@@ -75,8 +75,8 @@ func parseLLMSTxt(content string) (title, description string, topics []string) {
 		}
 
 		// H2 — topics
-		if strings.HasPrefix(trimmed, "## ") {
-			topic := strings.TrimPrefix(trimmed, "## ")
+		if after, ok := strings.CutPrefix(trimmed, "## "); ok {
+			topic := after
 			topics = append(topics, topic)
 		}
 	}

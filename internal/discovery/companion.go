@@ -105,7 +105,7 @@ func extractURLs(line, baseURL string) []parsedURL {
 	}
 
 	// Bare URLs/paths require recognized extensions
-	for _, word := range strings.Fields(remaining) {
+	for word := range strings.FieldsSeq(remaining) {
 		word = strings.TrimRight(word, ".,;:)")
 		if u := resolveURLStrict(word, baseURL); u != nil {
 			dup := false

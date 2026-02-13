@@ -50,11 +50,9 @@ func (e *Emitter) Emit(action, agentID string, data map[string]any) {
 		Data:    data,
 		TS:      time.Now(),
 	}
-	e.wg.Add(1)
-	go func() {
-		defer e.wg.Done()
+	e.wg.Go(func() {
 		e.send(evt)
-	}()
+	})
 }
 
 // Flush waits for all pending events to be sent.

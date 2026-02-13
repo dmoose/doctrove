@@ -10,13 +10,13 @@ import (
 
 // Stats holds aggregate information about the workspace.
 type Stats struct {
-	TotalSites    int         `json:"total_sites"`
-	TotalFiles    int         `json:"total_files"`
-	TotalSize     int64       `json:"total_size_bytes"`
-	TotalSizeHuman string    `json:"total_size"`
-	OldestSync    time.Time   `json:"oldest_sync,omitempty"`
-	NewestSync    time.Time   `json:"newest_sync,omitempty"`
-	SiteStats     []SiteStats `json:"sites"`
+	TotalSites     int         `json:"total_sites"`
+	TotalFiles     int         `json:"total_files"`
+	TotalSize      int64       `json:"total_size_bytes"`
+	TotalSizeHuman string      `json:"total_size"`
+	OldestSync     time.Time   `json:"oldest_sync"`
+	NewestSync     time.Time   `json:"newest_sync"`
+	SiteStats      []SiteStats `json:"sites"`
 }
 
 // SiteStats holds per-site statistics.
@@ -26,7 +26,7 @@ type SiteStats struct {
 	FileCount int       `json:"file_count"`
 	Size      int64     `json:"size_bytes"`
 	SizeHuman string    `json:"size"`
-	LastSync  time.Time `json:"last_sync,omitempty"`
+	LastSync  time.Time `json:"last_sync"`
 	Age       string    `json:"age,omitempty"` // human-readable time since last sync
 }
 

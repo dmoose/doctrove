@@ -11,6 +11,7 @@ import (
 	"github.com/dmoose/llmshadow/internal/discovery"
 	"github.com/dmoose/llmshadow/internal/events"
 	"github.com/dmoose/llmshadow/internal/fetcher"
+	"github.com/dmoose/llmshadow/internal/lockfile"
 	"github.com/dmoose/llmshadow/internal/mirror"
 	"github.com/dmoose/llmshadow/internal/robots"
 	"github.com/dmoose/llmshadow/internal/store"
@@ -87,7 +88,7 @@ func New(rootDir string, opts ...Options) (*Engine, error) {
 type SiteInfo struct {
 	Domain    string    `json:"domain"`
 	URL       string    `json:"url"`
-	LastSync  time.Time `json:"last_sync,omitempty"`
+	LastSync  time.Time `json:"last_sync"`
 	FileCount int       `json:"file_count"`
 }
 
@@ -116,6 +117,12 @@ type FileEntry struct {
 
 // Init adds a new site to track. It probes for content but does not download yet.
 func (e *Engine) Init(ctx context.Context, rawURL string) (*SiteInfo, error) {
+	lock, err := lockfile.Acquire(e.RootDir)
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Release()
+
 	if rawURL[len(rawURL)-1] == '/' {
 		rawURL = rawURL[:len(rawURL)-1]
 	}
@@ -148,6 +155,12 @@ func (e *Engine) Init(ctx context.Context, rawURL string) (*SiteInfo, error) {
 
 // Sync downloads/updates content for a site.
 func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
+	lock, err := lockfile.Acquire(e.RootDir)
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Release()
+
 	siteCfg, ok := e.Config.Sites[domain]
 	if !ok {
 		return nil, fmt.Errorf("site %q not tracked — run init first", domain)
@@ -193,9 +206,9 @@ func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
 		Committed:  committed,
 	}
 	e.Events.Emit("sync", "cli", map[string]any{
-		"domain":    domain,
-		"files":     len(mr.Added),
-		"errors":    len(mr.Errors),
+		"domain": domain,
+		"files":  len(mr.Added),
+		"errors": len(mr.Errors),
 	})
 	return sr, nil
 }
@@ -402,6 +415,12 @@ func (e *Engine) ListFiles(ctx context.Context, domain string) ([]FileEntry, err
 
 // Remove untracks a site, optionally deleting its files.
 func (e *Engine) Remove(ctx context.Context, domain string, keepFiles bool) error {
+	lock, err := lockfile.Acquire(e.RootDir)
+	if err != nil {
+		return err
+	}
+	defer lock.Release()
+
 	if err := e.Config.RemoveSite(domain); err != nil {
 		return err
 	}
