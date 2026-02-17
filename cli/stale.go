@@ -18,6 +18,7 @@ var staleCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer func() { _ = e.Close() }()
 
 		threshold, err := parseStaleDuration(staleThreshold)
 		if err != nil {

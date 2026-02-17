@@ -26,15 +26,15 @@ func Acquire(rootDir string) (*Lock, error) {
 
 	err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, fmt.Errorf("workspace is locked by another process")
 	}
 
 	// Write PID for debugging
-	f.Truncate(0)
-	f.Seek(0, 0)
-	fmt.Fprintf(f, "%d\n", os.Getpid())
-	f.Sync()
+	_ = f.Truncate(0)
+	_, _ = f.Seek(0, 0)
+	_, _ = fmt.Fprintf(f, "%d\n", os.Getpid())
+	_ = f.Sync()
 
 	return &Lock{file: f}, nil
 }
@@ -42,8 +42,8 @@ func Acquire(rootDir string) (*Lock, error) {
 // Release releases the lock.
 func (l *Lock) Release() {
 	if l.file != nil {
-		syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN)
-		l.file.Close()
-		os.Remove(l.file.Name())
+		_ = syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN)
+		_ = l.file.Close()
+		_ = os.Remove(l.file.Name())
 	}
 }

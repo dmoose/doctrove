@@ -25,11 +25,12 @@ type Fetcher struct {
 
 // Response holds the result of a fetch.
 type Response struct {
-	StatusCode  int
-	Body        []byte
-	ETag        string
-	URL         string
-	ContentType string
+	StatusCode   int
+	Body         []byte
+	ETag         string
+	LastModified string
+	URL          string
+	ContentType  string
 }
 
 // Options configures the Fetcher.
@@ -82,7 +83,7 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (*Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, nil
@@ -98,11 +99,67 @@ func (f *Fetcher) Fetch(ctx context.Context, url string) (*Response, error) {
 	}
 
 	return &Response{
-		StatusCode:  resp.StatusCode,
-		Body:        body,
-		ETag:        resp.Header.Get("ETag"),
-		URL:         url,
-		ContentType: resp.Header.Get("Content-Type"),
+		StatusCode:   resp.StatusCode,
+		Body:         body,
+		ETag:         resp.Header.Get("ETag"),
+		LastModified: resp.Header.Get("Last-Modified"),
+		URL:          url,
+		ContentType:  resp.Header.Get("Content-Type"),
+	}, nil
+}
+
+// FetchConditional retrieves content only if it has changed, using ETag and
+// Last-Modified headers for cache validation. Returns nil, nil on 304 Not
+// Modified (same pattern as 404).
+func (f *Fetcher) FetchConditional(ctx context.Context, url, etag, lastModified string) (*Response, error) {
+	if etag == "" && lastModified == "" {
+		return f.Fetch(ctx, url) // no cache headers, do a normal fetch
+	}
+
+	if err := f.limiterFor(url).Wait(ctx); err != nil {
+		return nil, fmt.Errorf("rate limit wait: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("User-Agent", f.userAgent)
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+	if lastModified != "" {
+		req.Header.Set("If-Modified-Since", lastModified)
+	}
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("fetching %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, nil // content unchanged
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetching %s: status %d", url, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response from %s: %w", url, err)
+	}
+
+	return &Response{
+		StatusCode:   resp.StatusCode,
+		Body:         body,
+		ETag:         resp.Header.Get("ETag"),
+		LastModified: resp.Header.Get("Last-Modified"),
+		URL:          url,
+		ContentType:  resp.Header.Get("Content-Type"),
 	}, nil
 }
 

@@ -1,4 +1,7 @@
-PREFIX ?= /usr/local
+GOBIN  ?= $(shell go env GOBIN)
+ifeq ($(GOBIN),)
+GOBIN = $(shell go env GOPATH)/bin
+endif
 BINARY = llmshadow
 
 .PHONY: build install uninstall test vet clean
@@ -6,15 +9,14 @@ BINARY = llmshadow
 build:
 	go build -o $(BINARY) ./cmd/llmshadow
 
-install: build
-	install -d $(PREFIX)/bin
-	install -m 755 $(BINARY) $(PREFIX)/bin/
-	@echo "Installed $(BINARY) to $(PREFIX)/bin/"
+install:
+	go install ./cmd/llmshadow
+	@echo "Installed $(BINARY) to $(GOBIN)/"
 	@echo "Workspace: ~/.config/llmshadow"
 	@echo "Run 'llmshadow mcp-config' for agent integration"
 
 uninstall:
-	rm -f $(PREFIX)/bin/$(BINARY)
+	rm -f $(GOBIN)/$(BINARY)
 
 test:
 	go test ./...

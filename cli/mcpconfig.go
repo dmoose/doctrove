@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	"github.com/spf13/cobra"
 )
@@ -41,13 +40,8 @@ var mcpConfigCmd = &cobra.Command{
 }
 
 func claudeCodeConfigPath() string {
-	home := "~"
-	if runtime.GOOS == "darwin" {
-		home = filepath.Join("~", ".claude", "claude_code_config.json")
-	} else {
-		home = filepath.Join("~", ".claude", "claude_code_config.json")
-	}
-	return home
+	// Path is the same on all platforms
+	return filepath.Join("~", ".claude", "claude_code_config.json")
 }
 
 func init() {

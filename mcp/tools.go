@@ -46,6 +46,9 @@ func scanTool() gomcp.Tool {
 			gomcp.Required(),
 			gomcp.Description("The base URL to track and sync (e.g. https://stripe.com)"),
 		),
+		gomcp.WithString("content_types",
+			gomcp.Description("Comma-separated content types to sync (e.g. 'llms-txt,llms-full-txt'). Omit to sync all discovered content."),
+		),
 	)
 }
 
@@ -56,17 +59,32 @@ func scanHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError("url is required"), nil
 		}
 
+		contentTypes := stringArg(req, "content_types", "")
+
 		info, err := e.Init(ctx, url)
 		if err != nil {
 			return gomcp.NewToolResultError(fmt.Sprintf("init: %v", err)), nil
 		}
 
-		syncResult, err := e.Sync(ctx, info.Domain)
+		var syncResult *engine.SyncResult
+		if contentTypes != "" {
+			syncResult, err = e.SyncWithContentTypes(ctx, info.Domain, contentTypes)
+		} else {
+			syncResult, err = e.Sync(ctx, info.Domain)
+		}
 		if err != nil {
 			return gomcp.NewToolResultError(fmt.Sprintf("sync: %v", err)), nil
 		}
 
-		return jsonResult(syncResult)
+		return jsonResult(map[string]any{
+			"domain":    syncResult.Domain,
+			"added":     len(syncResult.Added),
+			"unchanged": len(syncResult.Unchanged),
+			"skipped":   len(syncResult.Skipped),
+			"errors":    syncResult.Errors,
+			"sync_time": syncResult.SyncTime,
+			"committed": syncResult.Committed,
+		})
 	}
 }
 
@@ -85,6 +103,9 @@ func searchTool() gomcp.Tool {
 		gomcp.WithString("content_type",
 			gomcp.Description("Filter by content type: llms-txt, llms-full-txt, ai-txt, companion"),
 		),
+		gomcp.WithString("category",
+			gomcp.Description("Filter by page category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, other"),
+		),
 		gomcp.WithNumber("limit",
 			gomcp.Description("Max number of results (default 20)"),
 		),
@@ -101,6 +122,7 @@ func searchHandler(e *engine.Engine) server_handler {
 		hits, err := e.Search(ctx, query,
 			stringArg(req, "site", ""),
 			stringArg(req, "content_type", ""),
+			stringArg(req, "category", ""),
 			intArg(req, "limit", 20),
 		)
 		if err != nil {
@@ -126,6 +148,9 @@ func searchFullTool() gomcp.Tool {
 		gomcp.WithString("content_type",
 			gomcp.Description("Filter by content type"),
 		),
+		gomcp.WithString("category",
+			gomcp.Description("Filter by page category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, other"),
+		),
 	)
 }
 
@@ -139,6 +164,7 @@ func searchFullHandler(e *engine.Engine) server_handler {
 		result, err := e.SearchFull(ctx, query,
 			stringArg(req, "site", ""),
 			stringArg(req, "content_type", ""),
+			stringArg(req, "category", ""),
 		)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
@@ -253,6 +279,8 @@ func diffTool() gomcp.Tool {
 	)
 }
 
+const maxDiffBytes = 50_000
+
 func diffHandler(e *engine.Engine) server_handler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
 		from := stringArg(req, "from", "")
@@ -265,6 +293,13 @@ func diffHandler(e *engine.Engine) server_handler {
 
 		if diff == "" {
 			return gomcp.NewToolResultText("No changes."), nil
+		}
+
+		if len(diff) > maxDiffBytes {
+			diff = diff[:maxDiffBytes] + fmt.Sprintf(
+				"\n\n… truncated (%d bytes total, showing first %d). Use from/to refs to narrow the range.",
+				len(diff), maxDiffBytes,
+			)
 		}
 		return gomcp.NewToolResultText(diff), nil
 	}
@@ -390,6 +425,83 @@ func statsHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 		return jsonResult(stats)
+	}
+}
+
+// --- shadow_tag ---
+
+func tagTool() gomcp.Tool {
+	return gomcp.NewTool("shadow_tag",
+		gomcp.WithDescription("Override the category for a mirrored file — use this to correct misclassified pages (e.g. a marketing page wrongly tagged as api-reference)"),
+		gomcp.WithString("site",
+			gomcp.Required(),
+			gomcp.Description("The domain (e.g. stripe.com)"),
+		),
+		gomcp.WithString("path",
+			gomcp.Required(),
+			gomcp.Description("The URL path of the file (e.g. /docs/api.md)"),
+		),
+		gomcp.WithString("category",
+			gomcp.Required(),
+			gomcp.Description("New category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, other"),
+		),
+	)
+}
+
+func tagHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		site := stringArg(req, "site", "")
+		path := stringArg(req, "path", "")
+		category := stringArg(req, "category", "")
+		if site == "" || path == "" || category == "" {
+			return gomcp.NewToolResultError("site, path, and category are required"), nil
+		}
+
+		if err := e.Tag(ctx, site, path, category); err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return jsonResult(map[string]string{
+			"site":     site,
+			"path":     path,
+			"category": category,
+			"status":   "updated",
+		})
+	}
+}
+
+// --- shadow_refresh ---
+
+func refreshTool() gomcp.Tool {
+	return gomcp.NewTool("shadow_refresh",
+		gomcp.WithDescription("Re-sync a tracked site to pick up changes — uses cached ETags to skip unchanged files"),
+		gomcp.WithString("site",
+			gomcp.Required(),
+			gomcp.Description("The domain to refresh (e.g. modelcontextprotocol.io)"),
+		),
+	)
+}
+
+func refreshHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		site := stringArg(req, "site", "")
+		if site == "" {
+			return gomcp.NewToolResultError("site is required"), nil
+		}
+
+		result, err := e.Refresh(ctx, site)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return jsonResult(map[string]any{
+			"domain":    result.Domain,
+			"added":     len(result.Added),
+			"unchanged": len(result.Unchanged),
+			"skipped":   len(result.Skipped),
+			"errors":    result.Errors,
+			"sync_time": result.SyncTime,
+		})
 	}
 }
 

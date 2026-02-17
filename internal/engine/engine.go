@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dmoose/llmshadow/internal/config"
@@ -22,7 +23,7 @@ type Engine struct {
 	Config    *config.Config
 	Store     *store.Store
 	Git       *store.GitStore
-	Index     *store.Index
+	Index     store.Indexer
 	Discovery *discovery.Discoverer
 	Mirror    *mirror.Mirror
 	Fetcher   *fetcher.Fetcher
@@ -71,13 +72,20 @@ func New(rootDir string, opts ...Options) (*Engine, error) {
 
 	em := events.New(cfg.Settings.EventsURL, "llmshadow")
 
+	disc := discovery.New(f, rc, cfg.Settings.MaxProbes)
+
+	// Register additional providers based on config
+	if cfg.Settings.Context7APIKey != "" {
+		disc.RegisterProvider(discovery.NewContext7Provider(cfg.Settings.Context7APIKey))
+	}
+
 	return &Engine{
 		Config:    cfg,
 		Store:     s,
 		Git:       gs,
 		Index:     idx,
-		Discovery: discovery.New(f, rc, cfg.Settings.MaxProbes),
-		Mirror:    mirror.New(f, s),
+		Discovery: disc,
+		Mirror:    mirror.New(f, s, idx),
 		Fetcher:   f,
 		Events:    em,
 		RootDir:   rootDir,
@@ -113,6 +121,7 @@ type FileEntry struct {
 	Path        string `json:"path"`
 	Size        int64  `json:"size"`
 	ContentType string `json:"content_type"`
+	Category    string `json:"category"`
 }
 
 // Init adds a new site to track. It probes for content but does not download yet.
@@ -123,7 +132,7 @@ func (e *Engine) Init(ctx context.Context, rawURL string) (*SiteInfo, error) {
 	}
 	defer lock.Release()
 
-	if rawURL[len(rawURL)-1] == '/' {
+	if len(rawURL) > 0 && rawURL[len(rawURL)-1] == '/' {
 		rawURL = rawURL[:len(rawURL)-1]
 	}
 
@@ -149,12 +158,22 @@ func (e *Engine) Init(ctx context.Context, rawURL string) (*SiteInfo, error) {
 		URL:       rawURL,
 		FileCount: len(result.Files),
 	}
-	e.Events.Emit("init", "cli", map[string]any{"domain": info.Domain, "files_found": info.FileCount})
+	e.Events.EmitFull(events.Event{
+		Channel: "sync",
+		Action:  "init",
+		Level:   "info",
+		Data: map[string]any{
+			"domain":      info.Domain,
+			"files_found": info.FileCount,
+			"provider":    e.providerFor(rawURL),
+		},
+	})
 	return info, nil
 }
 
 // Sync downloads/updates content for a site.
 func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
+	start := time.Now()
 	lock, err := lockfile.Acquire(e.RootDir)
 	if err != nil {
 		return nil, err
@@ -205,10 +224,119 @@ func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
 		SyncTime:   now,
 		Committed:  committed,
 	}
-	e.Events.Emit("sync", "cli", map[string]any{
-		"domain": domain,
-		"files":  len(mr.Added),
-		"errors": len(mr.Errors),
+	syncLevel := "info"
+	if len(mr.Errors) > 0 {
+		syncLevel = "warn"
+	}
+	e.Events.EmitFull(events.Event{
+		Channel:    "sync",
+		Action:     "sync",
+		Level:      syncLevel,
+		DurationMS: time.Since(start).Milliseconds(),
+		Data: map[string]any{
+			"domain":    domain,
+			"added":     len(mr.Added),
+			"unchanged": len(mr.Unchanged),
+			"skipped":   len(mr.Skipped),
+			"errors":    len(mr.Errors),
+			"provider":  e.providerFor(siteCfg.URL),
+		},
+	})
+	return sr, nil
+}
+
+// SyncWithContentTypes syncs only files matching the given content types
+// (comma-separated, e.g. "llms-txt,llms-full-txt"). This lets agents skip
+// companion pages when they only need the index files.
+func (e *Engine) SyncWithContentTypes(ctx context.Context, domain, contentTypes string) (*SyncResult, error) {
+	allowed := make(map[string]bool)
+	for _, ct := range strings.Split(contentTypes, ",") {
+		ct = strings.TrimSpace(ct)
+		if ct != "" {
+			allowed[ct] = true
+		}
+	}
+	if len(allowed) == 0 {
+		return e.Sync(ctx, domain)
+	}
+
+	start := time.Now()
+	lock, err := lockfile.Acquire(e.RootDir)
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Release()
+
+	siteCfg, ok := e.Config.Sites[domain]
+	if !ok {
+		return nil, fmt.Errorf("site %q not tracked — run init first", domain)
+	}
+
+	result, err := e.Discovery.Discover(ctx, siteCfg.URL)
+	if err != nil {
+		return nil, fmt.Errorf("discovering content for %s: %w", domain, err)
+	}
+
+	// Filter discovered files to only allowed content types
+	var filtered []discovery.DiscoveredFile
+	for _, f := range result.Files {
+		if allowed[string(f.ContentType)] {
+			filtered = append(filtered, f)
+		}
+	}
+	result.Files = filtered
+
+	// Build include/exclude filter from site config
+	filter := mirror.BuildFilter(siteCfg.Include, siteCfg.Exclude)
+
+	mr, err := e.Mirror.Sync(ctx, result, filter)
+	if err != nil {
+		return nil, fmt.Errorf("syncing %s: %w", domain, err)
+	}
+
+	for _, file := range result.Files {
+		body, readErr := e.Store.ReadContent(domain, file.Path)
+		if readErr != nil {
+			continue
+		}
+		_ = e.Index.IndexFile(domain, file.Path, string(file.ContentType), string(body))
+	}
+
+	now := time.Now()
+	e.Config.UpdateLastSync(domain, now)
+	if err := e.Config.Save(); err != nil {
+		return nil, fmt.Errorf("saving config: %w", err)
+	}
+
+	commitMsg := fmt.Sprintf("sync %s: %d files (filtered)", domain, len(mr.Added))
+	committed, err := e.Git.Commit(commitMsg)
+	if err != nil {
+		return nil, fmt.Errorf("committing changes for %s: %w", domain, err)
+	}
+
+	sr := &SyncResult{
+		SyncResult: *mr,
+		SyncTime:   now,
+		Committed:  committed,
+	}
+	syncLevel := "info"
+	if len(mr.Errors) > 0 {
+		syncLevel = "warn"
+	}
+	e.Events.EmitFull(events.Event{
+		Channel:    "sync",
+		Action:     "sync",
+		Level:      syncLevel,
+		DurationMS: time.Since(start).Milliseconds(),
+		Data: map[string]any{
+			"domain":        domain,
+			"added":         len(mr.Added),
+			"unchanged":     len(mr.Unchanged),
+			"skipped":       len(mr.Skipped),
+			"errors":        len(mr.Errors),
+			"content_types": contentTypes,
+			"provider":      e.providerFor(siteCfg.URL),
+		},
 	})
 	return sr, nil
 }
@@ -234,7 +362,30 @@ func (e *Engine) SyncAll(ctx context.Context) ([]SyncResult, error) {
 
 // Discover probes a URL for LLM content without tracking it.
 func (e *Engine) Discover(ctx context.Context, rawURL string) (*discovery.Result, error) {
-	return e.Discovery.Discover(ctx, rawURL)
+	result, err := e.Discovery.Discover(ctx, rawURL)
+	if err == nil && result != nil {
+		e.Events.EmitFull(events.Event{
+			Channel: "sync",
+			Action:  "discover",
+			Level:   "info",
+			Data: map[string]any{
+				"domain":      result.Domain,
+				"files_found": len(result.Files),
+				"provider":    e.providerFor(rawURL),
+			},
+		})
+	}
+	return result, err
+}
+
+// providerFor returns the name of the provider that would handle this input.
+func (e *Engine) providerFor(input string) string {
+	for _, p := range e.Discovery.Providers() {
+		if p.CanHandle(input) {
+			return p.Name()
+		}
+	}
+	return "none"
 }
 
 // Status returns info about a tracked site.
@@ -321,10 +472,11 @@ type SearchResult struct {
 }
 
 // Search performs a full-text search across indexed content.
-func (e *Engine) Search(ctx context.Context, query string, site, contentType string, limit int) (*SearchResult, error) {
+func (e *Engine) Search(ctx context.Context, query string, site, contentType, category string, limit int) (*SearchResult, error) {
 	hits, err := e.Index.Search(query, store.SearchOpts{
 		Site:        site,
 		ContentType: contentType,
+		Category:    category,
 		Limit:       limit,
 	})
 	if err != nil {
@@ -339,8 +491,8 @@ func (e *Engine) Search(ctx context.Context, query string, site, contentType str
 }
 
 // SearchFull searches and returns the full content of the top hit.
-func (e *Engine) SearchFull(ctx context.Context, query string, site, contentType string) (*SearchFullResult, error) {
-	sr, err := e.Search(ctx, query, site, contentType, 1)
+func (e *Engine) SearchFull(ctx context.Context, query string, site, contentType, category string) (*SearchFullResult, error) {
+	sr, err := e.Search(ctx, query, site, contentType, category, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -359,6 +511,7 @@ func (e *Engine) SearchFull(ctx context.Context, query string, site, contentType
 	result.Domain = hit.Domain
 	result.Path = hit.Path
 	result.ContentType = hit.ContentType
+	result.Category = hit.Category
 	result.Content = string(body)
 	return result, nil
 }
@@ -368,6 +521,7 @@ type SearchFullResult struct {
 	Domain      string `json:"domain,omitempty"`
 	Path        string `json:"path,omitempty"`
 	ContentType string `json:"content_type,omitempty"`
+	Category    string `json:"category,omitempty"`
 	Content     string `json:"content,omitempty"`
 	Suggestion  string `json:"suggestion,omitempty"`
 }
@@ -397,10 +551,13 @@ func (e *Engine) ListFiles(ctx context.Context, domain string) ([]FileEntry, err
 		}
 		rel, _ := filepath.Rel(siteDir, path)
 		urlPath := "/" + rel
+		ct := store.ClassifyPath(urlPath)
+		cat, _ := e.Index.GetCategory(domain, urlPath)
 		files = append(files, FileEntry{
 			Path:        urlPath,
 			Size:        info.Size(),
-			ContentType: store.ClassifyPath(urlPath),
+			ContentType: ct,
+			Category:    cat,
 		})
 		return nil
 	})
@@ -442,7 +599,27 @@ func (e *Engine) Remove(ctx context.Context, domain string, keepFiles bool) erro
 	commitMsg := fmt.Sprintf("remove %s", domain)
 	_, _ = e.Git.Commit(commitMsg)
 
+	e.Events.EmitFull(events.Event{
+		Channel: "sync",
+		Action:  "remove",
+		Level:   "info",
+		Data:    map[string]any{"domain": domain, "keep_files": keepFiles},
+	})
 	return nil
+}
+
+// Tag overrides the category for a specific file (agent feedback).
+func (e *Engine) Tag(ctx context.Context, domain, path, category string) error {
+	return e.Index.SetCategory(domain, path, category)
+}
+
+// Refresh re-syncs a tracked site without re-discovering. Uses cached ETags
+// for conditional fetching. This is the "update what's changed" operation.
+func (e *Engine) Refresh(ctx context.Context, domain string) (*SyncResult, error) {
+	// Refresh delegates to Sync which already handles ETag caching.
+	// The distinction is semantic — refresh is for agents that want to
+	// update an already-tracked site without the "init" connotation.
+	return e.Sync(ctx, domain)
 }
 
 // Close releases resources held by the engine.

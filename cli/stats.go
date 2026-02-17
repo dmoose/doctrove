@@ -15,6 +15,7 @@ var statsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer func() { _ = e.Close() }()
 
 		stats, err := e.Stats(cmd.Context())
 		if err != nil {

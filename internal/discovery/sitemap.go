@@ -19,11 +19,11 @@ type sitemapURL struct {
 
 // probeSitemap checks sitemap.xml for URLs that look like LLM content
 // (paths ending in .md, .txt, or containing /llms/).
-func (d *Discoverer) probeSitemap(ctx context.Context, baseURL string, seen map[string]bool) []DiscoveredFile {
+func (p *SiteProvider) probeSitemap(ctx context.Context, baseURL string, seen map[string]bool) []DiscoveredFile {
 	baseURL = strings.TrimRight(baseURL, "/")
 	sitemapURL := baseURL + "/sitemap.xml"
 
-	resp, err := d.Fetcher.Fetch(ctx, sitemapURL)
+	resp, err := p.Fetcher.Fetch(ctx, sitemapURL)
 	if err != nil || resp == nil {
 		return nil
 	}
@@ -37,7 +37,7 @@ func (d *Discoverer) probeSitemap(ctx context.Context, baseURL string, seen map[
 	probes := 0
 
 	for _, u := range sitemap.URLs {
-		if probes >= d.MaxProbes {
+		if probes >= p.MaxProbes {
 			break
 		}
 		loc := u.Loc
@@ -56,11 +56,11 @@ func (d *Discoverer) probeSitemap(ctx context.Context, baseURL string, seen map[
 		probes++
 
 		// Check robots if enabled
-		if d.Robots != nil && !d.Robots.IsAllowed(ctx, loc) {
+		if p.Robots != nil && !p.Robots.IsAllowed(ctx, loc) {
 			continue
 		}
 
-		r, err := d.Fetcher.Fetch(ctx, loc)
+		r, err := p.Fetcher.Fetch(ctx, loc)
 		if err != nil || r == nil {
 			continue
 		}

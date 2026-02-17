@@ -16,6 +16,7 @@ var statusCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer func() { _ = e.Close() }()
 
 		if len(args) == 1 {
 			info, err := e.Status(cmd.Context(), args[0])

@@ -15,7 +15,7 @@ var mcpCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer e.Close()
+		defer func() { _ = e.Close() }()
 
 		return mcpserver.Serve(e)
 	},

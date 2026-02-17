@@ -24,17 +24,17 @@ var wellKnownPaths = []struct {
 }
 
 // probeWellKnown checks all standard well-known locations for LLM content.
-func (d *Discoverer) probeWellKnown(ctx context.Context, baseURL string) []DiscoveredFile {
+func (p *SiteProvider) probeWellKnown(ctx context.Context, baseURL string) []DiscoveredFile {
 	baseURL = strings.TrimRight(baseURL, "/")
 	var found []DiscoveredFile
 
 	for _, wk := range wellKnownPaths {
 		url := baseURL + wk.Path
 		// Check robots.txt if enabled
-		if d.Robots != nil && !d.Robots.IsAllowed(ctx, url) {
+		if p.Robots != nil && !p.Robots.IsAllowed(ctx, url) {
 			continue
 		}
-		resp, err := d.Fetcher.Fetch(ctx, url)
+		resp, err := p.Fetcher.Fetch(ctx, url)
 		if err != nil || resp == nil {
 			continue
 		}

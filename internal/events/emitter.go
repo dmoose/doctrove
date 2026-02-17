@@ -10,20 +10,24 @@ import (
 
 // Event is the structured payload sent to the event relay.
 type Event struct {
-	Source  string         `json:"source"`
-	Action  string         `json:"action"`
-	AgentID string         `json:"agent_id,omitempty"`
-	Data    map[string]any `json:"data,omitempty"`
-	TS      time.Time      `json:"ts"`
+	Source     string         `json:"source"`
+	Channel   string         `json:"channel,omitempty"`
+	Action    string         `json:"action"`
+	Level     string         `json:"level,omitempty"`
+	AgentID   string         `json:"agent_id,omitempty"`
+	DurationMS int64         `json:"duration_ms,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
+	TS        time.Time      `json:"ts"`
 }
 
 // Emitter sends events to an event relay service.
 // If URL is empty, all operations are no-ops (zero overhead).
 type Emitter struct {
-	url    string
-	source string
-	client *http.Client
-	wg     sync.WaitGroup
+	url     string
+	source  string
+	agentID string
+	client  *http.Client
+	wg      sync.WaitGroup
 }
 
 // New creates an Emitter. If url is empty, returns a no-op emitter.
@@ -38,17 +42,27 @@ func New(url, source string) *Emitter {
 	}
 }
 
+// SetAgentID sets the default agent ID used when callers pass an empty string.
+func (e *Emitter) SetAgentID(id string) {
+	e.agentID = id
+}
+
 // Emit sends an event to the relay. Fire-and-forget — never blocks, never errors.
+// If agentID is empty, the emitter's default agent ID is used.
 func (e *Emitter) Emit(action, agentID string, data map[string]any) {
+	e.EmitFull(Event{Action: action, AgentID: agentID, Data: data})
+}
+
+// EmitFull sends a fully specified event to the relay.
+// Source, TS, and AgentID (when empty) are filled automatically.
+func (e *Emitter) EmitFull(evt Event) {
 	if e.url == "" {
 		return
 	}
-	evt := Event{
-		Source:  e.source,
-		Action:  action,
-		AgentID: agentID,
-		Data:    data,
-		TS:      time.Now(),
+	evt.Source = e.source
+	evt.TS = time.Now()
+	if evt.AgentID == "" {
+		evt.AgentID = e.agentID
 	}
 	e.wg.Go(func() {
 		e.send(evt)
@@ -69,5 +83,5 @@ func (e *Emitter) send(evt Event) {
 	if err != nil {
 		return
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 }

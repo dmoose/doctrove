@@ -17,6 +17,7 @@ var listCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer func() { _ = e.Close() }()
 
 		sites, err := e.List(cmd.Context())
 		if err != nil {

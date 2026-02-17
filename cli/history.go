@@ -23,6 +23,7 @@ var historyCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer func() { _ = e.Close() }()
 
 		site := ""
 		if len(args) == 1 {

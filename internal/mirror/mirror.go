@@ -14,20 +14,22 @@ import (
 type Mirror struct {
 	Fetcher *fetcher.Fetcher
 	Store   *store.Store
+	Index   store.Indexer
 }
 
 // New creates a Mirror.
-func New(f *fetcher.Fetcher, s *store.Store) *Mirror {
-	return &Mirror{Fetcher: f, Store: s}
+func New(f *fetcher.Fetcher, s *store.Store, idx store.Indexer) *Mirror {
+	return &Mirror{Fetcher: f, Store: s, Index: idx}
 }
 
 // SyncResult tracks what happened during a sync.
 type SyncResult struct {
-	Domain  string   `json:"domain"`
-	Added   []string `json:"added,omitempty"`
-	Updated []string `json:"updated,omitempty"`
-	Skipped []string `json:"skipped,omitempty"`
-	Errors  []string `json:"errors,omitempty"`
+	Domain    string   `json:"domain"`
+	Added     []string `json:"added,omitempty"`
+	Updated   []string `json:"updated,omitempty"`
+	Unchanged []string `json:"unchanged,omitempty"`
+	Skipped   []string `json:"skipped,omitempty"`
+	Errors    []string `json:"errors,omitempty"`
 }
 
 // FilterFunc returns true if a path should be included in the sync.
@@ -76,31 +78,57 @@ func (m *Mirror) Sync(ctx context.Context, result *discovery.Result, filter Filt
 			continue
 		}
 
-		resp, err := m.Fetcher.Fetch(ctx, file.URL)
-		if err != nil {
-			sr.Errors = append(sr.Errors, fmt.Sprintf("%s: %v", file.Path, err))
-			continue
-		}
-		if resp == nil {
-			continue
-		}
+		var content string
 
-		content := string(resp.Body)
-
-		// Convert HTML to markdown if needed
-		if fetcher.IsHTML(resp.ContentType, resp.Body) {
-			md, convErr := fetcher.ConvertHTML(content)
-			if convErr != nil || len(md) < 50 {
-				sr.Errors = append(sr.Errors, fmt.Sprintf("%s: rejected (HTML, conversion failed)", file.Path))
+		if file.Body != nil {
+			// Provider already fetched the content (e.g., Context7, DevDocs)
+			content = string(file.Body)
+		} else {
+			// Try conditional fetch if we have cached headers
+			var (
+				resp    *fetcher.Response
+				fetchErr error
+			)
+			etag, lastMod, _ := m.Index.GetCacheHeaders(result.Domain, file.Path)
+			if etag != "" || lastMod != "" {
+				resp, fetchErr = m.Fetcher.FetchConditional(ctx, file.URL, etag, lastMod)
+			} else {
+				resp, fetchErr = m.Fetcher.Fetch(ctx, file.URL)
+			}
+			if fetchErr != nil {
+				sr.Errors = append(sr.Errors, fmt.Sprintf("%s: %v", file.Path, fetchErr))
 				continue
 			}
-			content = md
+			if resp == nil {
+				// 304 Not Modified or 404
+				if etag != "" || lastMod != "" {
+					sr.Unchanged = append(sr.Unchanged, file.Path)
+				}
+				continue
+			}
+
+			content = string(resp.Body)
+
+			// Convert HTML to markdown if needed
+			if fetcher.IsHTML(resp.ContentType, resp.Body) {
+				md, convErr := fetcher.ConvertHTML(content)
+				if convErr != nil || len(md) < 50 {
+					sr.Errors = append(sr.Errors, fmt.Sprintf("%s: rejected (HTML, conversion failed)", file.Path))
+					continue
+				}
+				content = md
+			}
+
+			// Store cache headers for next sync
+			if resp.ETag != "" || resp.LastModified != "" {
+				_ = m.Index.UpdateCacheHeaders(result.Domain, file.Path, resp.ETag, resp.LastModified)
+			}
 		}
 		content = RewriteLinks(content, result.BaseURL)
 
-		_, err = m.Store.WriteContent(result.Domain, file.Path, []byte(content))
-		if err != nil {
-			sr.Errors = append(sr.Errors, fmt.Sprintf("%s: %v", file.Path, err))
+		_, writeErr := m.Store.WriteContent(result.Domain, file.Path, []byte(content))
+		if writeErr != nil {
+			sr.Errors = append(sr.Errors, fmt.Sprintf("%s: %v", file.Path, writeErr))
 			continue
 		}
 		sr.Added = append(sr.Added, file.Path)

@@ -16,6 +16,7 @@ var diffCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer func() { _ = e.Close() }()
 
 		from := ""
 		to := "HEAD"

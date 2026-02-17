@@ -15,6 +15,7 @@ var checkCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer func() { _ = e.Close() }()
 
 		result, err := e.Check(cmd.Context(), args[0])
 		if err != nil {

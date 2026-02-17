@@ -8,16 +8,16 @@ import (
 	"github.com/dmoose/llmshadow/internal/fetcher"
 )
 
-// maxCompanionProbes default; overridden by Discoverer.MaxProbes
+// maxCompanionProbes default; overridden by SiteProvider.MaxProbes
 
 // parseCompanions parses an llms.txt file to find referenced companion files.
 // Markdown links are followed permissively (same-domain links in llms.txt are
 // intentional), while bare URLs require a recognized file extension. All fetched
 // content is validated to reject HTML pages.
-func (d *Discoverer) parseCompanions(ctx context.Context, baseURL string, llmsTxt DiscoveredFile) []DiscoveredFile {
+func (p *SiteProvider) parseCompanions(ctx context.Context, baseURL string, llmsTxt DiscoveredFile) []DiscoveredFile {
 	baseURL = strings.TrimRight(baseURL, "/")
 
-	resp, err := d.Fetcher.Fetch(ctx, llmsTxt.URL)
+	resp, err := p.Fetcher.Fetch(ctx, llmsTxt.URL)
 	if err != nil || resp == nil {
 		return nil
 	}
@@ -31,7 +31,7 @@ func (d *Discoverer) parseCompanions(ctx context.Context, baseURL string, llmsTx
 		line := scanner.Text()
 		urls := extractURLs(line, baseURL)
 		for _, u := range urls {
-			if probes >= d.MaxProbes {
+			if probes >= p.MaxProbes {
 				return found
 			}
 			if seen[u.path] {
@@ -41,10 +41,10 @@ func (d *Discoverer) parseCompanions(ctx context.Context, baseURL string, llmsTx
 			probes++
 
 			// Check robots.txt if enabled
-			if d.Robots != nil && !d.Robots.IsAllowed(ctx, u.full) {
+			if p.Robots != nil && !p.Robots.IsAllowed(ctx, u.full) {
 				continue
 			}
-			resp, err := d.Fetcher.Fetch(ctx, u.full)
+			resp, err := p.Fetcher.Fetch(ctx, u.full)
 			if err != nil || resp == nil {
 				continue
 			}

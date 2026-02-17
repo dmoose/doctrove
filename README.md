@@ -143,4 +143,27 @@ Content is stored as plain files under `sites/<domain>/`, tracked by git for cha
 
 ## Event Relay Integration
 
-When `events_url` is configured, all MCP tool calls and CLI operations emit structured events to an [eventrelay](../eventrelay) server for real-time observability.
+When `events_url` is configured, llmshadow emits structured events to an [eventrelay](../eventrelay) server for real-time observability. Events follow the full eventrelay schema:
+
+```json
+{
+  "source": "llmshadow",
+  "channel": "mcp",
+  "action": "shadow_search",
+  "level": "info",
+  "agent_id": "myproject:00a3f1",
+  "duration_ms": 42,
+  "data": {"query": "authentication", "site": "stripe.com"},
+  "ts": "2026-03-18T12:00:00Z"
+}
+```
+
+| Field | Description |
+|---|---|
+| `source` | Always `llmshadow` |
+| `channel` | `mcp` for MCP tool calls, `sync` for engine operations (init, sync, discover, remove) |
+| `action` | Tool or operation name (e.g. `shadow_search`, `sync`, `init`) |
+| `level` | `info` normally, `error` on failure, `warn` on partial errors |
+| `agent_id` | Auto-derived from working directory + PID (e.g. `myproject:00a3f1`) |
+| `duration_ms` | Operation wall time (top-level, displayed inline in the dashboard) |
+| `data` | Tool arguments (MCP) or operation details (engine) |

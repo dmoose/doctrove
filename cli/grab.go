@@ -15,7 +15,7 @@ var grabCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer e.Close()
+		defer func() { _ = e.Close() }()
 
 		info, err := e.Init(cmd.Context(), args[0])
 		if err != nil {

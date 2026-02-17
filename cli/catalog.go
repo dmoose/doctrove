@@ -16,6 +16,7 @@ var catalogCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		defer func() { _ = e.Close() }()
 
 		entries, err := e.Catalog(cmd.Context())
 		if err != nil {

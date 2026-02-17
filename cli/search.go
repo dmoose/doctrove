@@ -9,6 +9,7 @@ import (
 var (
 	searchSite        string
 	searchContentType string
+	searchCategory    string
 	searchLimit       int
 	searchRebuild     bool
 	searchFull        bool
@@ -23,7 +24,7 @@ var searchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer e.Close()
+		defer func() { _ = e.Close() }()
 
 		if searchRebuild {
 			fmt.Println("Rebuilding search index...")
@@ -36,7 +37,7 @@ var searchCmd = &cobra.Command{
 
 		// --full: return complete content of best match
 		if searchFull {
-			result, err := e.SearchFull(cmd.Context(), query, searchSite, searchContentType)
+			result, err := e.SearchFull(cmd.Context(), query, searchSite, searchContentType, searchCategory)
 			if err != nil {
 				return err
 			}
@@ -55,7 +56,7 @@ var searchCmd = &cobra.Command{
 			return nil
 		}
 
-		sr, err := e.Search(cmd.Context(), query, searchSite, searchContentType, searchLimit)
+		sr, err := e.Search(cmd.Context(), query, searchSite, searchContentType, searchCategory, searchLimit)
 		if err != nil {
 			return err
 		}
@@ -73,7 +74,11 @@ var searchCmd = &cobra.Command{
 		}
 
 		for _, h := range sr.Hits {
-			fmt.Printf("%s %s [%s]\n", h.Domain, h.Path, h.ContentType)
+			catLabel := ""
+			if h.Category != "" && h.Category != "other" {
+				catLabel = " (" + h.Category + ")"
+			}
+			fmt.Printf("%s %s [%s%s]\n", h.Domain, h.Path, h.ContentType, catLabel)
 			fmt.Printf("  %s\n\n", h.Snippet)
 		}
 		return nil
@@ -83,6 +88,7 @@ var searchCmd = &cobra.Command{
 func init() {
 	searchCmd.Flags().StringVar(&searchSite, "site", "", "filter to a specific domain")
 	searchCmd.Flags().StringVar(&searchContentType, "type", "", "filter by content type: llms-txt, companion, etc.")
+	searchCmd.Flags().StringVar(&searchCategory, "category", "", "filter by category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community")
 	searchCmd.Flags().IntVarP(&searchLimit, "limit", "n", 20, "max results")
 	searchCmd.Flags().BoolVar(&searchRebuild, "rebuild", false, "rebuild search index before searching")
 	searchCmd.Flags().BoolVar(&searchFull, "full", false, "return full content of the best match")

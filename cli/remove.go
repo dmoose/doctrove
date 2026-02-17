@@ -17,7 +17,7 @@ var removeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		defer e.Close()
+		defer func() { _ = e.Close() }()
 
 		domain := args[0]
 		if err := e.Remove(cmd.Context(), domain, keepFiles); err != nil {
