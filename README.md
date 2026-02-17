@@ -2,11 +2,18 @@
 
 A central store for LLM-targeted documentation. Discovers, mirrors, and indexes content from sites that publish `llms.txt`, companion `.html.md` files, and related formats. Designed for developers who want local, searchable access to LLM-friendly docs — and for AI agents that need to find and read them.
 
+## Install
+
+```bash
+make install                   # builds and installs to /usr/local/bin
+llmshadow mcp-config           # shows config to add to your agent
+```
+
+Workspace defaults to `~/.config/llmshadow`. Override with `--dir` or `LLMSHADOW_DIR`.
+
 ## Quick Start
 
 ```bash
-go build -o llmshadow ./cmd/llmshadow
-
 # Discover what a site has
 llmshadow discover https://stripe.com
 
@@ -45,14 +52,27 @@ All commands support `--json` for machine-readable output.
 
 ## MCP Server
 
-Add to your agent's MCP config:
+Generate your config snippet:
+
+```bash
+llmshadow mcp-config
+```
+
+Add the `mcpServers` entry to your agent's config file:
+
+| Agent | Config File |
+|---|---|
+| Claude Code | `~/.claude/claude_code_config.json` |
+| Cursor | `.cursor/mcp.json` (project root) |
+
+Example config:
 
 ```json
 {
   "mcpServers": {
     "llmshadow": {
-      "command": "llmshadow",
-      "args": ["mcp", "--dir", "/path/to/workspace"]
+      "command": "/usr/local/bin/llmshadow",
+      "args": ["mcp", "--dir", "/Users/you/.config/llmshadow"]
     }
   }
 }

@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/cobra"
 )
@@ -28,8 +30,24 @@ var mcpConfigCmd = &cobra.Command{
 }`, bin, rootDir)
 
 		fmt.Println(config)
+		fmt.Println()
+		fmt.Println("Add the mcpServers entry to:")
+		fmt.Printf("  Claude Code: %s\n", claudeCodeConfigPath())
+		fmt.Println("  Cursor:      .cursor/mcp.json (in project root)")
+		fmt.Println()
+		fmt.Println("Or merge into your existing config if you already have mcpServers defined.")
 		return nil
 	},
+}
+
+func claudeCodeConfigPath() string {
+	home := "~"
+	if runtime.GOOS == "darwin" {
+		home = filepath.Join("~", ".claude", "claude_code_config.json")
+	} else {
+		home = filepath.Join("~", ".claude", "claude_code_config.json")
+	}
+	return home
 }
 
 func init() {
