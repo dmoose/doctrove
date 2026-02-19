@@ -53,6 +53,9 @@ func (idx *Index) ensureSchema() error {
 			path TEXT NOT NULL,
 			content_type TEXT NOT NULL,
 			size INTEGER NOT NULL DEFAULT 0,
+			category TEXT NOT NULL DEFAULT '',
+			etag TEXT NOT NULL DEFAULT '',
+			last_modified TEXT NOT NULL DEFAULT '',
 			indexed_at TEXT NOT NULL,
 			PRIMARY KEY (domain, path)
 		);
@@ -60,22 +63,7 @@ func (idx *Index) ensureSchema() error {
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
-
-	// Migrate: add columns introduced after initial schema
-	idx.migrateColumns()
 	return nil
-}
-
-func (idx *Index) migrateColumns() {
-	// Check if migration is needed by probing for the category column
-	var count int
-	_ = idx.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('content_meta') WHERE name='category'").Scan(&count)
-	if count > 0 {
-		return // already migrated
-	}
-	idx.db.Exec("ALTER TABLE content_meta ADD COLUMN category TEXT NOT NULL DEFAULT ''")
-	idx.db.Exec("ALTER TABLE content_meta ADD COLUMN etag TEXT NOT NULL DEFAULT ''")
-	idx.db.Exec("ALTER TABLE content_meta ADD COLUMN last_modified TEXT NOT NULL DEFAULT ''")
 }
 
 // IndexFile adds or updates a file in the search index.
