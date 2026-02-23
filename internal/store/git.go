@@ -19,23 +19,28 @@ type GitStore struct {
 }
 
 // InitGit initializes or opens the git repository in the workspace root.
+// On a fresh workspace it creates a seed commit so HEAD is valid immediately.
 func InitGit(root string) (*GitStore, error) {
 	gs := &GitStore{root: root}
 
 	repo, err := git.PlainOpen(root)
 	if err == nil {
 		gs.repo = repo
+		// Recover from a partial init (e.g. PlainOpen found .git but no HEAD).
+		if err := gs.ensureHead(); err != nil {
+			return nil, err
+		}
 		return gs, nil
 	}
 
-	// Not a repo yet — initialize
+	// Not a repo yet — initialize.
 	repo, err = git.PlainInit(root, false)
 	if err != nil {
 		return nil, fmt.Errorf("initializing git repo: %w", err)
 	}
 	gs.repo = repo
 
-	// Create initial .gitignore for the workspace
+	// Create initial .gitignore for the workspace.
 	gitignore := filepath.Join(root, ".gitignore")
 	if _, err := os.Stat(gitignore); os.IsNotExist(err) {
 		content := "doctrove.db\ndoctrove.db-wal\ndoctrove.db-shm\n"
@@ -44,7 +49,58 @@ func InitGit(root string) (*GitStore, error) {
 		}
 	}
 
+	// Seed commit so HEAD is valid from the start.
+	if err := gs.seedCommit(); err != nil {
+		return nil, fmt.Errorf("creating seed commit: %w", err)
+	}
+
 	return gs, nil
+}
+
+// seedCommit stages .gitignore and creates the initial commit.
+func (gs *GitStore) seedCommit() error {
+	wt, err := gs.repo.Worktree()
+	if err != nil {
+		return err
+	}
+	if _, err := wt.Add(".gitignore"); err != nil {
+		return err
+	}
+	_, err = wt.Commit("init workspace", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "doctrove",
+			Email: "doctrove@local",
+			When:  time.Now(),
+		},
+	})
+	return err
+}
+
+// ensureHead checks that HEAD resolves to a valid ref. If the repo was
+// partially initialized (e.g. has .git/objects but no HEAD), it recovers
+// by creating a seed commit.
+func (gs *GitStore) ensureHead() error {
+	_, err := gs.repo.Head()
+	if err == nil {
+		return nil
+	}
+	// HEAD is dangling — stage whatever exists and commit.
+	wt, err := gs.repo.Worktree()
+	if err != nil {
+		return fmt.Errorf("recovering HEAD: %w", err)
+	}
+	_ = wt.AddGlob(".")
+	_, err = wt.Commit("recover workspace", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "doctrove",
+			Email: "doctrove@local",
+			When:  time.Now(),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("recovering HEAD: %w", err)
+	}
+	return nil
 }
 
 // Commit stages all changes and creates a commit. Returns true if a commit was

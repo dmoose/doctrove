@@ -4,7 +4,7 @@ package store
 // The default implementation uses SQLite FTS5. Alternative implementations
 // could provide semantic/vector search or different storage engines.
 type Indexer interface {
-	IndexFile(domain, path, contentType, body string) error
+	IndexFile(domain, path, contentType, body string, category ...string) error
 	Search(query string, opts SearchOpts) ([]SearchHit, error)
 	DeleteSite(domain string) error
 	Rebuild(store *Store) error

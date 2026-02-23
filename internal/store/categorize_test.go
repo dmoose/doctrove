@@ -48,14 +48,14 @@ func TestCategorizePathPatterns(t *testing.T) {
 		{"/seps/1686-tasks.md", "companion", CatCommunity},
 
 		// Content type shortcuts
-		{"/llms.txt", "llms-txt", CatOther},
-		{"/llms-full.txt", "llms-full-txt", CatOther},
+		{"/llms.txt", "llms-txt", CatIndex},
+		{"/llms-full.txt", "llms-full-txt", CatIndex},
 		{"/docs.md", "context7", CatContext7},
 		{"/.well-known/agent.json", "well-known", CatOther},
 	}
 
 	for _, tt := range tests {
-		got := Categorize("example.com", tt.path, tt.contentType, "")
+		got := categorize("example.com", tt.path, tt.contentType, "")
 		if got != tt.want {
 			t.Errorf("Categorize(%q, %q) = %q, want %q", tt.path, tt.contentType, got, tt.want)
 		}
@@ -65,7 +65,7 @@ func TestCategorizePathPatterns(t *testing.T) {
 func TestCategorizeByBody(t *testing.T) {
 	// High code block density → api-reference
 	codeHeavy := "# API\n\n" + strings.Repeat("```go\nfunc Foo() {}\n```\n\nSome text.\n\n", 4)
-	got := Categorize("example.com", "/docs/foo.md", "companion", codeHeavy)
+	got := categorize("example.com", "/docs/foo.md", "companion", codeHeavy)
 	if got != CatAPIReference {
 		t.Errorf("code-heavy body: got %q, want %q", got, CatAPIReference)
 	}
@@ -76,14 +76,14 @@ func TestCategorizeByBody(t *testing.T) {
 		lines = append(lines, "[Link](http://example.com/page)")
 	}
 	linkHeavy := strings.Join(lines, "\n")
-	got = Categorize("example.com", "/products/foo", "companion", linkHeavy)
+	got = categorize("example.com", "/products/foo", "companion", linkHeavy)
 	if got != CatMarketing {
 		t.Errorf("link-heavy body: got %q, want %q", got, CatMarketing)
 	}
 
 	// Normal prose → other
 	prose := strings.Repeat("This is a normal paragraph with enough text to be meaningful. ", 20)
-	got = Categorize("example.com", "/docs/overview.md", "companion", prose)
+	got = categorize("example.com", "/docs/overview.md", "companion", prose)
 	if got != CatOther {
 		t.Errorf("prose body: got %q, want %q", got, CatOther)
 	}

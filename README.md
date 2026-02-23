@@ -98,7 +98,7 @@ Example config:
 | `trove_check` | Dry-run: show available content without downloading |
 | `trove_search` | Full-text search with `category` filter; results include summaries when available |
 | `trove_search_full` | Search and return full content of best match (large — prefer outline+section read) |
-| `trove_outline` | Get heading structure / table of contents for a file with section sizes |
+| `trove_outline` | Get heading structure with `max_depth` (default 3) and `max_sections` (default 100) caps |
 | `trove_read` | Read a file or specific section by heading match (`section` param) |
 | `trove_summarize` | Store an agent-written summary for a file (visible in search results and outlines) |
 | `trove_tag` | Override category for a file (persists across re-syncs) |
@@ -151,7 +151,8 @@ Every indexed file is assigned a semantic category for task-appropriate filterin
 | `legal` | `/privacy`, `/legal/`, `/terms` |
 | `community` | `/community/`, `/seps/`, `/contributing` |
 | `context7` | Content fetched via Context7 API |
-| `other` | Index files, unclassified companions |
+| `index` | llms.txt, llms-full.txt, ai.txt — site index files |
+| `other` | Unclassified companions, well-known metadata |
 
 Categories are assigned by path heuristics (fast) with body analysis as fallback. Agents can override with `trove_tag` / `doctrove tag`.
 

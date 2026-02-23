@@ -104,7 +104,7 @@ func searchTool() gomcp.Tool {
 			gomcp.Description("Filter by content type: llms-txt, llms-full-txt, ai-txt, companion"),
 		),
 		gomcp.WithString("category",
-			gomcp.Description("Filter by page category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, other"),
+			gomcp.Description("Filter by page category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, index, other"),
 		),
 		gomcp.WithNumber("limit",
 			gomcp.Description("Max number of results (default 20)"),
@@ -153,7 +153,7 @@ func searchFullTool() gomcp.Tool {
 			gomcp.Description("Filter by content type"),
 		),
 		gomcp.WithString("category",
-			gomcp.Description("Filter by page category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, other"),
+			gomcp.Description("Filter by page category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, index, other"),
 		),
 	)
 }
@@ -485,7 +485,7 @@ func tagTool() gomcp.Tool {
 		),
 		gomcp.WithString("category",
 			gomcp.Required(),
-			gomcp.Description("New category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, other"),
+			gomcp.Description("New category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, index, other"),
 		),
 	)
 }
@@ -588,6 +588,12 @@ func outlineTool() gomcp.Tool {
 			gomcp.Required(),
 			gomcp.Description("The URL path of the file (e.g. /llms.txt)"),
 		),
+		gomcp.WithNumber("max_depth",
+			gomcp.Description("Max heading depth to include (1-6, default 3). Use 0 for all levels."),
+		),
+		gomcp.WithNumber("max_sections",
+			gomcp.Description("Max sections to return (default 100). Use 0 for unlimited."),
+		),
 	)
 }
 
@@ -598,8 +604,10 @@ func outlineHandler(e *engine.Engine) server_handler {
 		if site == "" || path == "" {
 			return gomcp.NewToolResultError("site and path are required"), nil
 		}
+		maxDepth := intArg(req, "max_depth", 3)
+		maxSections := intArg(req, "max_sections", 100)
 
-		result, err := e.Outline(ctx, site, path)
+		result, err := e.Outline(ctx, site, path, maxDepth, maxSections)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}

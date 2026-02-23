@@ -1,6 +1,6 @@
 # doctrove Design Document
 
-A Go tool that discovers, downloads, and maintains local mirrors of websites' LLM-targeted content (llms.txt, companion .html.md files, etc.) with git-based change tracking, full-text search, and an MCP interface for agent access.
+A Go tool that discovers, downloads, and maintains local mirrors of websites' LLM-targeted content (llms.txt, companion files, etc.) with git-based change tracking, full-text search, and an MCP interface for agent access.
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Three layers — interfaces, core engine, storage — so CLI, MCP, and Go librar
 │  │  │ Discovery  │ │  Mirror  │ │   Index   │ │ │
 │  │  └────────────┘ └──────────┘ └───────────┘ │ │
 │  │  ┌────────────┐ ┌──────────┐ ┌───────────┐ │ │
-│  │  │   Search   │ │   Git    │ │  Config   │ │ │
+│  │  │  Content   │ │   Git    │ │  Config   │ │ │
 │  │  └────────────┘ └──────────┘ └───────────┘ │ │
 │  └────────────────────────────────────────────┘ │
 ├─────────────────────────────────────────────────┤
@@ -36,228 +36,258 @@ Three layers — interfaces, core engine, storage — so CLI, MCP, and Go librar
 
 ```
 doctrove/
-├── cmd/
-│   └── doctrove/
-│       └── main.go              # Entry point
+├── cmd/doctrove/
+│   └── main.go                    # Entry point
 ├── internal/
 │   ├── engine/
-│   │   └── engine.go            # Core orchestrator — ties subsystems together
+│   │   ├── engine.go              # Engine struct, New(), Close()
+│   │   ├── sync.go                # Sync, SyncWithContentTypes, SyncAll, Refresh
+│   │   ├── read.go                # Outline, ReadSection (delegates to ContentProcessor)
+│   │   ├── search.go              # Search, SearchFull, RebuildIndex
+│   │   ├── manage.go              # Init, Discover, Status, List, Check, History, Diff,
+│   │   │                          #   ListFiles, Remove, Tag, Summarize
+│   │   ├── catalog.go             # Catalog (llms.txt topic extraction)
+│   │   └── stats.go               # Stats, Stale, humanAge/humanSize
+│   ├── content/
+│   │   ├── content.go             # Processor interface (Outline, ReadSection)
+│   │   ├── markdown.go            # MarkdownProcessor (default)
+│   │   └── summarizer.go          # Summarizer interface + NoOpSummarizer
 │   ├── discovery/
-│   │   ├── discovery.go         # Discovery strategy interface + orchestrator
-│   │   ├── wellknown.go         # /llms.txt, /llms-full.txt, /ai.txt probing
-│   │   ├── companion.go         # .html.md companion file parsing
-│   │   └── sitemap.go           # Sitemap-based discovery
+│   │   ├── discovery.go           # Provider interface + Discoverer orchestrator
+│   │   ├── wellknown.go           # /llms.txt, /llms-full.txt, /ai.txt probing
+│   │   ├── companion.go           # Companion file parsing from llms.txt links
+│   │   ├── context7.go            # Context7 API provider (optional)
+│   │   └── sitemap.go             # Sitemap-based discovery
 │   ├── mirror/
-│   │   ├── mirror.go            # Download, store, link-rewrite
-│   │   ├── rewriter.go          # URL → local path rewriting
-│   │   └── diff.go              # Content diffing before commit
+│   │   ├── mirror.go              # Download, store, include/exclude filtering
+│   │   └── rewriter.go            # URL → local path link rewriting
 │   ├── store/
-│   │   ├── store.go             # Filesystem layout abstraction
-│   │   ├── git.go               # Git commit/log/diff operations
-│   │   └── index.go             # SQLite FTS5 search index
+│   │   ├── store.go               # Filesystem layout abstraction
+│   │   ├── git.go                 # Git init (with seed commit), commit, log, diff
+│   │   ├── index.go               # SQLite FTS5 search index
+│   │   ├── indexer.go             # Indexer interface
+│   │   └── categorize.go          # Categorizer interface + RuleCategorizer
 │   ├── config/
-│   │   └── config.go            # YAML config loading, defaults, validation
-│   ├── search/
-│   │   └── search.go            # Full-text + metadata search over mirrored content
-│   └── fetcher/
-│       └── fetcher.go           # HTTP client: rate limiting, ETags, retries
+│   │   └── config.go              # YAML config loading, defaults
+│   ├── fetcher/
+│   │   ├── fetcher.go             # HTTP client: rate limiting, ETags, conditional requests
+│   │   └── convert.go             # HTML-to-markdown conversion
+│   ├── events/
+│   │   └── emitter.go             # Structured event emission to eventrelay
+│   ├── robots/
+│   │   └── robots.go              # robots.txt compliance checking
+│   └── lockfile/
+│       └── lockfile.go            # Workspace concurrency lock
 ├── cli/
-│   ├── root.go                  # cobra root command
-│   ├── init.go                  # doctrove init <url>
-│   ├── sync.go                  # doctrove sync [site|--all]
-│   ├── status.go                # doctrove status [site]
-│   ├── search.go                # doctrove search <query> [--site]
-│   ├── list.go                  # doctrove list [--format json|table]
-│   ├── serve.go                 # doctrove serve (local HTTP)
-│   ├── check.go                 # doctrove check [site] (dry-run sync)
-│   ├── discover.go              # doctrove discover <url>
-│   ├── history.go               # doctrove history [site]
-│   ├── diff.go                  # doctrove diff <site> [ref..ref]
-│   └── mcp.go                   # doctrove mcp (start MCP server)
+│   ├── root.go                    # Cobra root command, --dir/--json/--respect-robots
+│   ├── grab.go                    # doctrove grab <url> (init + sync)
+│   └── ...                        # One file per command (19 commands)
 ├── mcp/
-│   ├── server.go                # MCP server setup, tool registration
-│   └── tools.go                 # MCP tool handlers → engine calls
+│   ├── server.go                  # MCP server setup, tool registration, tracing
+│   └── tools.go                   # 18 MCP tool handlers → engine calls
 ├── go.mod
-├── go.sum
-└── doctrove.yaml                # Example config
+└── go.sum
 ```
 
-## Core Engine Interface
+## Interfaces
 
-The single source of truth that both CLI and MCP call into. Every method returns structured data — CLI formats for humans, MCP returns JSON.
+The system uses interfaces at key extension points so implementations can be swapped:
+
+### Provider (discovery)
+```go
+type Provider interface {
+    Name() string
+    CanHandle(input string) bool
+    Discover(ctx context.Context, input string) (*Result, error)
+}
+```
+Implementations: `SiteProvider` (default, handles URLs), `Context7Provider` (bare library names).
+
+### Indexer (search/storage)
+```go
+type Indexer interface {
+    IndexFile(domain, path, contentType, body string, category ...string) error
+    Search(query string, opts SearchOpts) ([]SearchHit, error)
+    DeleteSite(domain string) error
+    Rebuild(store *Store) error
+    GetCacheHeaders(domain, path string) (etag, lastModified string, err error)
+    UpdateCacheHeaders(domain, path, etag, lastModified string) error
+    GetCategory(domain, path string) (string, error)
+    SetCategory(domain, path, category string) error
+    GetSummary(domain, path string) (summary, summaryAt string, err error)
+    SetSummary(domain, path, summary string) error
+    CategoryCounts(domain string) (map[string]int, error)
+    Close() error
+}
+```
+Default implementation: SQLite FTS5 with porter tokenization.
+
+### Processor (content parsing)
+```go
+type Processor interface {
+    Name() string
+    CanProcess(path, contentType string) bool
+    Outline(content string, maxDepth, maxSections int) OutlineResult
+    ReadSection(content, sectionName string) (string, error)
+}
+```
+Default implementation: `MarkdownProcessor` (ATX heading parser). Future: reStructuredText, AsciiDoc.
+
+### Categorizer (page classification)
+```go
+type Categorizer interface {
+    Categorize(domain, path, contentType, body string) string
+}
+```
+Default implementation: `RuleCategorizer` (path patterns + body heuristics). Future: ML-based, LLM-based.
+
+### Summarizer (content summarization)
+```go
+type Summarizer interface {
+    Summarize(ctx context.Context, domain, path, content string) (string, error)
+}
+```
+Default implementation: `NoOpSummarizer` (relies on agent-submitted summaries). Future: LLM-based auto-summarization, extractive methods.
+
+## Core Engine
 
 ```go
-package engine
-
 type Engine struct {
-    Config    *config.Config
-    Store     *store.Store
-    Discovery *discovery.Discoverer
-    Mirror    *mirror.Mirror
-    Search    *search.Searcher
-    Fetcher   *fetcher.Fetcher
+    Config      *config.Config
+    Store       *store.Store
+    Git         *store.GitStore
+    Index       store.Indexer
+    Discovery   *discovery.Discoverer
+    Mirror      *mirror.Mirror
+    Fetcher     *fetcher.Fetcher
+    Events      *events.Emitter
+    Processors  []content.Processor
+    Categorizer store.Categorizer
+    RootDir     string
 }
-
-// Site lifecycle
-func (e *Engine) Init(ctx context.Context, url string, opts InitOpts) (*SiteInfo, error)
-func (e *Engine) Remove(ctx context.Context, site string) error
-
-// Content operations
-func (e *Engine) Sync(ctx context.Context, site string, opts SyncOpts) (*SyncResult, error)
-func (e *Engine) SyncAll(ctx context.Context, opts SyncOpts) ([]SyncResult, error)
-func (e *Engine) Check(ctx context.Context, site string) (*CheckResult, error)
-
-// Discovery (standalone — probe without committing to tracking)
-func (e *Engine) Discover(ctx context.Context, url string) (*DiscoveryResult, error)
-
-// Query
-func (e *Engine) Status(ctx context.Context, site string) (*SiteStatus, error)
-func (e *Engine) List(ctx context.Context) ([]SiteInfo, error)
-func (e *Engine) Search(ctx context.Context, query string, opts SearchOpts) ([]SearchHit, error)
-
-// History
-func (e *Engine) History(ctx context.Context, site string, opts HistoryOpts) ([]ChangeEntry, error)
-func (e *Engine) Diff(ctx context.Context, site string, from, to string) (string, error)
 ```
 
-## Discovery Strategy
+All methods return structured data — CLI formats for humans, MCP returns JSON. Key methods:
 
-Following the llms.txt ecosystem patterns:
+| Group | Methods |
+|---|---|
+| Lifecycle | `Init`, `Remove`, `Discover` |
+| Sync | `Sync`, `SyncWithContentTypes`, `SyncAll`, `Refresh` |
+| Read | `Outline`, `ReadSection` |
+| Search | `Search`, `SearchFull`, `RebuildIndex` |
+| Query | `Status`, `List`, `Check`, `ListFiles`, `Catalog`, `Stats` |
+| History | `History`, `Diff` |
+| Feedback | `Tag`, `Summarize` |
 
-1. **Well-known locations**: `/llms.txt`, `/llms-full.txt`, `/ai.txt`
-2. **Companion file discovery**: Parse llms.txt for `.html.md` file references
-3. **Link following**: Parse llms.txt sections to find all referenced content
-4. **Sitemap integration**: Check for structured LLM content organization
+## Content Discovery
 
-Discovery is a standalone subsystem. An agent can call `Discover()` to probe a URL without tracking it. `Init()` + `Sync()` persists results.
+Discovery uses the Provider pattern — multiple providers are tried in order:
+
+1. **Well-known paths:** `/llms.txt`, `/llms-full.txt`, `/llms-ctx.txt`, `/llms-ctx-full.txt`, `/ai.txt`, `/.well-known/tdmrep.json`, `/.well-known/agent.json`
+2. **Companion files:** Markdown links and bare URLs parsed from llms.txt (capped at `max_probes` per site)
+3. **Sitemap:** `sitemap.xml` paths containing `/llms/` or ending in `.md`/`.txt`
+4. **Context7 API:** Bare library names resolved to curated docs (optional, requires API key)
+5. **HTML conversion:** Sites serving HTML at content URLs are auto-converted to markdown
 
 ## Storage
 
 ### Filesystem Layout
-
 ```
-<root>/
-├── .git/                        # Git repository for change tracking
+<workspace>/
+├── .git/                        # Git repo for change tracking
 ├── doctrove.yaml                # Configuration
-├── doctrove.db                  # SQLite FTS5 search index
-├── sites/
-│   └── <domain>/
-│       ├── llms.txt             # Main index file
-│       ├── llms-full.txt        # Full content export
-│       ├── docs/
-│       │   ├── api.html.md      # Companion files
-│       │   └── guide.html.md
-│       └── _meta/
-│           ├── discovered.json  # Discovery metadata
-│           └── links.json       # Link mapping
-└── index.md                     # Global index of all sites
+├── doctrove.db                  # SQLite FTS5 index (gitignored)
+└── sites/
+    └── <domain>/
+        ├── llms.txt
+        ├── llms-full.txt
+        ├── docs/*.md            # Companion files
+        └── _meta/
+            ├── discovered.json
+            └── links.json
 ```
-
-### Store Abstraction
-
-The `store` package owns the directory convention. Nothing else touches the filesystem directly, so the layout can evolve without touching engine logic.
 
 ### Git Integration
-
-Each sync auto-commits changes. Git is the source of truth; the search index is derived and can be rebuilt from the filesystem at any time.
+- Fresh workspaces get a seed commit (HEAD is valid from the start)
+- Each sync auto-commits changes
+- Git failures are non-fatal — content is downloaded and indexed regardless
+- Partial `.git` directories are auto-recovered via `ensureHead()`
 
 ### Search Index
+SQLite FTS5 with porter + unicode61 tokenization. Concurrent access from CLI and MCP via WAL mode. Search results include:
+- FTS5 snippets with `**bold**` match highlighting
+- Cached agent-submitted summaries
+- Categories for filtering
 
-SQLite FTS5 — chosen over bleve because it handles concurrent access from CLI and MCP processes cleanly. The index rebuilds from the filesystem on demand.
+## Page Categories
+
+| Category | Assigned by |
+|---|---|
+| `api-reference` | Path `/api/`, `/reference/`, or ≥3 code blocks |
+| `tutorial` | Path `/tutorials/`, `/getting-started/`, `/quickstart` |
+| `guide` | Path `/guides/`, `/learn/`, `/how-to/` |
+| `spec` | Path `/specification/`, `/schema` |
+| `changelog` | Path `/changelog`, `/release-notes` |
+| `marketing` | Path `/pricing`, `/use-cases/`, or link-heavy pages |
+| `legal` | Path `/privacy`, `/legal/`, `/terms` |
+| `community` | Path `/community/`, `/seps/`, `/contributing` |
+| `context7` | Content from Context7 API |
+| `index` | llms.txt, llms-full.txt, ai.txt family |
+| `other` | Unclassified, well-known metadata |
+
+Categories are auto-assigned by `RuleCategorizer` (path patterns, then body heuristics). User overrides via `Tag()` persist across re-syncs.
+
+## MCP Tools (18)
+
+| Tool | Engine Method |
+|---|---|
+| `trove_discover` | `Discover()` |
+| `trove_scan` | `Init()` + `SyncWithContentTypes()` |
+| `trove_search` | `Search()` |
+| `trove_search_full` | `SearchFull()` |
+| `trove_list` | `List()` |
+| `trove_read` | `ReadSection()` |
+| `trove_status` | `Status()` |
+| `trove_diff` | `Diff()` |
+| `trove_history` | `History()` |
+| `trove_list_files` | `ListFiles()` |
+| `trove_remove` | `Remove()` |
+| `trove_catalog` | `Catalog()` |
+| `trove_stats` | `Stats()` |
+| `trove_tag` | `Tag()` |
+| `trove_refresh` | `Refresh()` |
+| `trove_check` | `Check()` |
+| `trove_outline` | `Outline()` (with `max_depth`, `max_sections` caps) |
+| `trove_summarize` | `Summarize()` |
+
+All tool calls are traced via the event emitter with wall time and agent_id.
+
+## Context-Efficient Workflow
+
+Tools are designed for hierarchical drill-down to minimize LLM context usage:
+
+```
+trove_catalog          → which site has docs on my topic?
+trove_search           → which files are relevant? (check summaries first)
+trove_outline          → what sections? (capped at depth 3, 100 sections)
+trove_read section=X   → read just the section I need
+trove_summarize        → cache summary so next agent skips re-reading
+```
 
 ## Fetcher
 
 All HTTP goes through `fetcher.Fetcher`:
-
-- Per-domain rate limiting (x/time/rate)
-- robots.txt respect (configurable)
-- ETag / Last-Modified conditional requests for efficient syncs
-- Retries with exponential backoff
-- User-Agent identification (`doctrove/<version>`)
-
-## MCP Interface
-
-MCP server runs via `doctrove mcp` using stdio transport. Agents add it to their MCP config directly.
-
-### Tools Exposed
-
-| Tool | Description | Engine Method |
-|---|---|---|
-| `trove_discover` | Probe a URL for LLM content without saving | `Engine.Discover()` |
-| `trove_scan` | Init + sync a new site | `Engine.Init()` + `Engine.Sync()` |
-| `trove_search` | Full-text search across mirrored content | `Engine.Search()` |
-| `trove_list` | List all tracked sites with status | `Engine.List()` |
-| `trove_read` | Read a specific mirrored file | direct file read via `Store` |
-| `trove_status` | Get sync status and stats for a site | `Engine.Status()` |
-| `trove_diff` | Show what changed between syncs | `Engine.Diff()` |
-
-## CLI Commands
-
-```
-doctrove init <url>              # Add a site to track
-doctrove sync [site|--all]       # Download/update content
-doctrove check [site|--all]      # Dry-run: report what would change
-doctrove status [site]           # Show tracked sites, last sync, file counts
-doctrove list [--format json]    # List all tracked sites
-doctrove search <query>          # Full-text search across all content
-  --site <domain>                #   scope to one site
-  --type llms-txt|companion|full #   filter by content type
-doctrove discover <url>          # Probe a URL without tracking
-doctrove history [site]          # Show git-based change history
-doctrove diff <site> [ref..ref]  # Show content changes between syncs
-doctrove serve [--port 8080]     # Serve mirrored content over HTTP
-doctrove mcp                     # Start MCP server (stdio)
-doctrove config                  # Show/edit config
-```
-
-## Configuration
-
-```yaml
-sites:
-  example.com:
-    url: "https://example.com"
-    include:
-      - "/llms*.txt"
-      - "/**/*.html.md"
-      - "/docs/**"
-    exclude:
-      - "/internal/**"
-      - "/admin/**"
-    update_freq: "daily"
-    last_sync: "2026-03-16T10:30:00Z"
-```
+- Per-domain rate limiting (`golang.org/x/time/rate`, default 2/sec burst 5)
+- ETag / Last-Modified conditional requests for efficient re-syncs
+- HTML detection and auto-conversion to markdown
+- Configurable user-agent, timeout
 
 ## Dependencies
 
 - **cobra** — CLI framework
-- **go-git** — git operations without shelling out
-- **modernc.org/sqlite** or **mattn/go-sqlite3** — SQLite FTS5 (pure Go preferred)
-- **mcp-go** (or raw JSON-RPC over stdio) — MCP server
+- **go-git/go-git** — git operations (no shell exec)
+- **modernc.org/sqlite** — SQLite FTS5 (pure Go, CGo-free)
+- **mark3labs/mcp-go** — MCP server (stdio transport)
 - **gopkg.in/yaml.v3** — config
 - **golang.org/x/time/rate** — rate limiting
-
-## Build Order
-
-Each phase delivers a usable tool:
-
-### Phase 1 — Core loop
-`config`, `fetcher`, `discovery/wellknown`, `store` (filesystem only), `mirror`, `engine`.
-CLI: `init`, `sync`, `status`, `list`.
-No git, no search — just download files to disk.
-
-### Phase 2 — Git + history
-`store/git`, `engine.History`, `engine.Diff`.
-CLI: `history`, `diff`, `check`.
-Each sync auto-commits.
-
-### Phase 3 — Search
-`store/index`, `search`.
-CLI: `search`.
-Index builds on sync.
-
-### Phase 4 — MCP
-`mcp/` package. Wraps engine methods as MCP tools.
-CLI: `mcp`.
-
-### Phase 5 — Polish
-`serve`, companion file discovery, sitemap integration, conditional fetching (ETags), `--format` flags, `discover` command.
+- **JohannesKaufmann/html-to-markdown** — HTML conversion

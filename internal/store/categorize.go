@@ -14,13 +14,27 @@ const (
 	CatLegal        = "legal"
 	CatCommunity    = "community"
 	CatContext7     = "context7"
+	CatIndex        = "index"
 	CatOther        = "other"
 )
 
-// Categorize assigns a semantic category to a page based on its path, content
+// Categorizer assigns semantic categories to indexed pages.
+// Implementations can use path patterns, body analysis, ML models, etc.
+type Categorizer interface {
+	Categorize(domain, path, contentType, body string) string
+}
+
+// RuleCategorizer is the default implementation using path patterns and body heuristics.
+type RuleCategorizer struct{}
+
+func (r *RuleCategorizer) Categorize(domain, path, contentType, body string) string {
+	return categorize(domain, path, contentType, body)
+}
+
+// categorize assigns a semantic category to a page based on its path, content
 // type, and body content. Path patterns are checked first (fast), then body
 // heuristics as a fallback.
-func Categorize(domain, path, contentType, body string) string {
+func categorize(domain, path, contentType, body string) string {
 	lower := strings.ToLower(path)
 
 	// Content type shortcuts
@@ -29,7 +43,10 @@ func Categorize(domain, path, contentType, body string) string {
 	}
 	if contentType == "llms-txt" || contentType == "llms-full-txt" ||
 		contentType == "llms-ctx-txt" || contentType == "llms-ctx-full-txt" ||
-		contentType == "ai-txt" || contentType == "tdmrep" || contentType == "well-known" {
+		contentType == "ai-txt" {
+		return CatIndex
+	}
+	if contentType == "tdmrep" || contentType == "well-known" {
 		return CatOther
 	}
 

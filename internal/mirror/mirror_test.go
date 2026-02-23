@@ -14,7 +14,9 @@ import (
 // stubIndexer satisfies store.Indexer for mirror tests without touching SQLite.
 type stubIndexer struct{}
 
-func (s *stubIndexer) IndexFile(domain, path, contentType, body string) error { return nil }
+func (s *stubIndexer) IndexFile(domain, path, contentType, body string, category ...string) error {
+	return nil
+}
 func (s *stubIndexer) Search(query string, opts store.SearchOpts) ([]store.SearchHit, error) {
 	return nil, nil
 }

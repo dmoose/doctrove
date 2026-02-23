@@ -75,8 +75,11 @@ func (idx *Index) ensureSchema() error {
 
 // IndexFile adds or updates a file in the search index.
 // Category is derived automatically from path, content type, and body.
-func (idx *Index) IndexFile(domain, urlPath, contentType, body string) error {
-	category := Categorize(domain, urlPath, contentType, body)
+func (idx *Index) IndexFile(domain, urlPath, contentType, body string, category ...string) error {
+	cat := CatOther
+	if len(category) > 0 && category[0] != "" {
+		cat = category[0]
+	}
 
 	tx, err := idx.db.Begin()
 	if err != nil {
@@ -112,7 +115,7 @@ func (idx *Index) IndexFile(domain, urlPath, contentType, body string) error {
 			size = excluded.size,
 			category = CASE WHEN content_meta.user_category = 1 THEN content_meta.category ELSE excluded.category END,
 			indexed_at = excluded.indexed_at
-	`, domain, urlPath, contentType, len(body), category)
+	`, domain, urlPath, contentType, len(body), cat)
 	if err != nil {
 		return fmt.Errorf("upserting metadata: %w", err)
 	}
@@ -171,7 +174,7 @@ func (idx *Index) Search(query string, opts SearchOpts) ([]SearchHit, error) {
 	q := fmt.Sprintf(`
 		SELECT content.domain, content.path, content.content_type,
 			COALESCE(m.category, ''),
-			snippet(content, 3, '>>>', '<<<', '...', 40),
+			snippet(content, 3, '**', '**', '...', 40),
 			COALESCE(m.summary, ''),
 			content.rank
 		FROM content
@@ -236,7 +239,8 @@ func (idx *Index) Rebuild(store *Store) error {
 			urlPath := "/" + rel
 			ct := classifyPath(urlPath)
 
-			return idx.IndexFile(domain, urlPath, ct, string(body))
+			cat := categorize(domain, urlPath, ct, string(body))
+			return idx.IndexFile(domain, urlPath, ct, string(body), cat)
 		})
 		if err != nil {
 			return fmt.Errorf("indexing %s: %w", domain, err)
