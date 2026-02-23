@@ -12,6 +12,8 @@ type Indexer interface {
 	UpdateCacheHeaders(domain, path, etag, lastModified string) error
 	GetCategory(domain, path string) (string, error)
 	SetCategory(domain, path, category string) error
+	GetSummary(domain, path string) (summary, summaryAt string, err error)
+	SetSummary(domain, path, summary string) error
 	CategoryCounts(domain string) (map[string]int, error)
 	Close() error
 }

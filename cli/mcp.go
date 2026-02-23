@@ -1,7 +1,7 @@
 package cli
 
 import (
-	mcpserver "github.com/dmoose/llmshadow/mcp"
+	mcpserver "github.com/dmoose/doctrove/mcp"
 	"github.com/spf13/cobra"
 )
 

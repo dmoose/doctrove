@@ -5,7 +5,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/dmoose/llmshadow/internal/fetcher"
+	"github.com/dmoose/doctrove/internal/fetcher"
 )
 
 // maxCompanionProbes default; overridden by SiteProvider.MaxProbes

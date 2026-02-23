@@ -25,7 +25,7 @@ var syncCmd = &cobra.Command{
 				return err
 			}
 			if len(results) == 0 {
-				fmt.Println("No sites tracked. Run 'llmshadow init <url>' first.")
+				fmt.Println("No sites tracked. Run 'doctrove init <url>' first.")
 				return nil
 			}
 			if jsonOutput {

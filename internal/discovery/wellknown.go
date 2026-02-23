@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/dmoose/llmshadow/internal/fetcher"
+	"github.com/dmoose/doctrove/internal/fetcher"
 )
 
 // wellKnownPaths are the standard locations for LLM-targeted content.

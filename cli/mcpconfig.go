@@ -11,17 +11,17 @@ import (
 var mcpConfigCmd = &cobra.Command{
 	Use:   "mcp-config",
 	Short: "Output MCP server configuration for agent tools",
-	Long:  "Prints the JSON config snippet to add llmshadow as an MCP server in Claude Code, Cursor, or other MCP-compatible agents.",
+	Long:  "Prints the JSON config snippet to add doctrove as an MCP server in Claude Code, Cursor, or other MCP-compatible agents.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		bin, err := exec.LookPath("llmshadow")
+		bin, err := exec.LookPath("doctrove")
 		if err != nil {
-			bin = "llmshadow"
+			bin = "doctrove"
 		}
 
 		config := fmt.Sprintf(`{
   "mcpServers": {
-    "llmshadow": {
+    "doctrove": {
       "command": "%s",
       "args": ["mcp", "--dir", "%s"]
     }
@@ -31,8 +31,9 @@ var mcpConfigCmd = &cobra.Command{
 		fmt.Println(config)
 		fmt.Println()
 		fmt.Println("Add the mcpServers entry to:")
-		fmt.Printf("  Claude Code: %s\n", claudeCodeConfigPath())
-		fmt.Println("  Cursor:      .cursor/mcp.json (in project root)")
+		fmt.Printf("  Claude Code (user):    %s\n", claudeCodeConfigPath())
+		fmt.Println("  Claude Code (project): .mcp.json (in project root)")
+		fmt.Println("  Cursor:                .cursor/mcp.json (in project root)")
 		fmt.Println()
 		fmt.Println("Or merge into your existing config if you already have mcpServers defined.")
 		return nil
@@ -41,7 +42,7 @@ var mcpConfigCmd = &cobra.Command{
 
 func claudeCodeConfigPath() string {
 	// Path is the same on all platforms
-	return filepath.Join("~", ".claude", "claude_code_config.json")
+	return filepath.Join("~", ".claude.json")
 }
 
 func init() {

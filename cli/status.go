@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/dmoose/llmshadow/internal/engine"
+	"github.com/dmoose/doctrove/internal/engine"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +35,7 @@ var statusCmd = &cobra.Command{
 			return err
 		}
 		if len(sites) == 0 {
-			fmt.Println("No sites tracked. Run 'llmshadow init <url>' first.")
+			fmt.Println("No sites tracked. Run 'doctrove init <url>' first.")
 			return nil
 		}
 		if jsonOutput {

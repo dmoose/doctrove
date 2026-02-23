@@ -6,12 +6,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dmoose/llmshadow/internal/fetcher"
+	"github.com/dmoose/doctrove/internal/fetcher"
 )
 
 // AI-specific user-agents to check in robots.txt.
 var aiUserAgents = []string{
-	"llmshadow",
+	"doctrove",
 	"GPTBot",
 	"ClaudeBot",
 	"anthropic-ai",

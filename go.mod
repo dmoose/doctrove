@@ -1,4 +1,4 @@
-module github.com/dmoose/llmshadow
+module github.com/dmoose/doctrove
 
 go 1.26.0
 

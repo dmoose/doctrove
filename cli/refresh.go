@@ -25,7 +25,7 @@ var refreshCmd = &cobra.Command{
 				return err
 			}
 			if len(results) == 0 {
-				fmt.Println("No sites tracked. Run 'llmshadow grab <url>' first.")
+				fmt.Println("No sites tracked. Run 'doctrove grab <url>' first.")
 				return nil
 			}
 			if jsonOutput {

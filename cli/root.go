@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dmoose/llmshadow/internal/engine"
+	"github.com/dmoose/doctrove/internal/engine"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +17,7 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "llmshadow",
+	Use:   "doctrove",
 	Short: "Mirror and track websites' LLM-targeted content",
 	Long:  "A tool that discovers, downloads, and maintains local mirrors of websites' LLM-targeted content with change tracking.",
 }
@@ -28,17 +28,17 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "output results as JSON")
 }
 
-// defaultDir returns the workspace directory, checking LLMSHADOW_DIR env var
-// first, then falling back to ~/.config/llmshadow.
+// defaultDir returns the workspace directory, checking DOCTROVE_DIR env var
+// first, then falling back to ~/.config/doctrove.
 func defaultDir() string {
-	if dir := os.Getenv("LLMSHADOW_DIR"); dir != "" {
+	if dir := os.Getenv("DOCTROVE_DIR"); dir != "" {
 		return dir
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "."
 	}
-	return filepath.Join(home, ".config", "llmshadow")
+	return filepath.Join(home, ".config", "doctrove")
 }
 
 // Execute runs the root command.

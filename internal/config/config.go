@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultConfigFile = "llmshadow.yaml"
+const DefaultConfigFile = "doctrove.yaml"
 
 type Config struct {
 	Settings *Settings               `yaml:"settings,omitempty"`
@@ -34,7 +34,7 @@ func DefaultSettings() *Settings {
 		RateBurst: 5,
 		Timeout:   "30s",
 		MaxProbes: 100,
-		UserAgent: "llmshadow/0.1",
+		UserAgent: "doctrove/0.1",
 	}
 }
 
@@ -48,11 +48,12 @@ func (s *Settings) TimeoutDuration() time.Duration {
 }
 
 type SiteConfig struct {
-	URL        string    `yaml:"url"`
-	Include    []string  `yaml:"include,omitempty"`
-	Exclude    []string  `yaml:"exclude,omitempty"`
-	UpdateFreq string    `yaml:"update_freq,omitempty"`
-	LastSync   time.Time `yaml:"last_sync,omitempty"`
+	URL          string    `yaml:"url"`
+	Include      []string  `yaml:"include,omitempty"`
+	Exclude      []string  `yaml:"exclude,omitempty"`
+	ContentTypes string    `yaml:"content_types,omitempty"` // persisted from scan (e.g. "llms-txt,llms-full-txt")
+	UpdateFreq   string    `yaml:"update_freq,omitempty"`
+	LastSync     time.Time `yaml:"last_sync,omitempty"`
 }
 
 // Load reads the config from the given root directory.

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dmoose/llmshadow/internal/engine"
-	"github.com/dmoose/llmshadow/internal/events"
+	"github.com/dmoose/doctrove/internal/engine"
+	"github.com/dmoose/doctrove/internal/events"
 	gomcp "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -30,7 +30,7 @@ func defaultAgentID() string {
 // NewServer creates an MCP server wired to the given engine.
 func NewServer(e *engine.Engine) *server.MCPServer {
 	s := server.NewMCPServer(
-		"llmshadow",
+		"doctrove",
 		"0.1.0",
 		server.WithToolCapabilities(true),
 	)
@@ -69,6 +69,9 @@ func registerTools(s *server.MCPServer, e *engine.Engine, sessionID string) {
 	add(statsTool(), statsHandler(e))
 	add(tagTool(), tagHandler(e))
 	add(refreshTool(), refreshHandler(e))
+	add(checkTool(), checkHandler(e))
+	add(outlineTool(), outlineHandler(e))
+	add(summarizeTool(), summarizeHandler(e))
 }
 
 // traced wraps a tool handler to emit events to the relay.

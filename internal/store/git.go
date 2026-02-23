@@ -38,7 +38,7 @@ func InitGit(root string) (*GitStore, error) {
 	// Create initial .gitignore for the workspace
 	gitignore := filepath.Join(root, ".gitignore")
 	if _, err := os.Stat(gitignore); os.IsNotExist(err) {
-		content := "llmshadow.db\n"
+		content := "doctrove.db\ndoctrove.db-wal\ndoctrove.db-shm\n"
 		if err := os.WriteFile(gitignore, []byte(content), 0644); err != nil {
 			return nil, fmt.Errorf("writing .gitignore: %w", err)
 		}
@@ -71,8 +71,8 @@ func (gs *GitStore) Commit(message string) (bool, error) {
 
 	_, err = wt.Commit(message, &git.CommitOptions{
 		Author: &object.Signature{
-			Name:  "llmshadow",
-			Email: "llmshadow@local",
+			Name:  "doctrove",
+			Email: "doctrove@local",
 			When:  time.Now(),
 		},
 	})

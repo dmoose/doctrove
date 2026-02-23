@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-const lockFileName = ".llmshadow.lock"
+const lockFileName = ".doctrove.lock"
 
 // Lock holds an exclusive file lock on the workspace.
 type Lock struct {

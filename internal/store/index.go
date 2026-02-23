@@ -18,7 +18,7 @@ type Index struct {
 
 // OpenIndex opens or creates the search index database.
 func OpenIndex(rootDir string) (*Index, error) {
-	dbPath := filepath.Join(rootDir, "llmshadow.db")
+	dbPath := filepath.Join(rootDir, "doctrove.db")
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening index db: %w", err)
@@ -54,6 +54,9 @@ func (idx *Index) ensureSchema() error {
 			content_type TEXT NOT NULL,
 			size INTEGER NOT NULL DEFAULT 0,
 			category TEXT NOT NULL DEFAULT '',
+			user_category INTEGER NOT NULL DEFAULT 0,
+			summary TEXT NOT NULL DEFAULT '',
+			summary_at TEXT NOT NULL DEFAULT '',
 			etag TEXT NOT NULL DEFAULT '',
 			last_modified TEXT NOT NULL DEFAULT '',
 			indexed_at TEXT NOT NULL,
@@ -63,6 +66,10 @@ func (idx *Index) ensureSchema() error {
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
+	// Migrations for existing databases.
+	_, _ = idx.db.Exec(`ALTER TABLE content_meta ADD COLUMN user_category INTEGER NOT NULL DEFAULT 0`)
+	_, _ = idx.db.Exec(`ALTER TABLE content_meta ADD COLUMN summary TEXT NOT NULL DEFAULT ''`)
+	_, _ = idx.db.Exec(`ALTER TABLE content_meta ADD COLUMN summary_at TEXT NOT NULL DEFAULT ''`)
 	return nil
 }
 
@@ -95,14 +102,15 @@ func (idx *Index) IndexFile(domain, urlPath, contentType, body string) error {
 		return fmt.Errorf("inserting fts entry: %w", err)
 	}
 
-	// Upsert metadata (preserve etag/last_modified if already set)
+	// Upsert metadata. If the user has overridden the category (user_category=1),
+	// preserve their choice instead of overwriting with the auto-derived one.
 	_, err = tx.Exec(`
 		INSERT INTO content_meta (domain, path, content_type, size, category, indexed_at)
 		VALUES (?, ?, ?, ?, ?, datetime('now'))
 		ON CONFLICT(domain, path) DO UPDATE SET
 			content_type = excluded.content_type,
 			size = excluded.size,
-			category = excluded.category,
+			category = CASE WHEN content_meta.user_category = 1 THEN content_meta.category ELSE excluded.category END,
 			indexed_at = excluded.indexed_at
 	`, domain, urlPath, contentType, len(body), category)
 	if err != nil {
@@ -119,6 +127,7 @@ type SearchHit struct {
 	ContentType string  `json:"content_type"`
 	Category    string  `json:"category"`
 	Snippet     string  `json:"snippet"`
+	Summary     string  `json:"summary,omitempty"`
 	Rank        float64 `json:"rank"`
 }
 
@@ -128,6 +137,7 @@ type SearchOpts struct {
 	ContentType string // filter to a content type
 	Category    string // filter to a category (e.g. "api-reference")
 	Limit       int
+	Offset      int
 }
 
 // Search performs a full-text search across all indexed content.
@@ -156,17 +166,19 @@ func (idx *Index) Search(query string, opts SearchOpts) ([]SearchHit, error) {
 	}
 
 	where := strings.Join(conditions, " AND ")
-	args = append(args, opts.Limit)
+	args = append(args, opts.Limit, opts.Offset)
 
 	q := fmt.Sprintf(`
 		SELECT content.domain, content.path, content.content_type,
 			COALESCE(m.category, ''),
-			snippet(content, 3, '>>>', '<<<', '...', 40), content.rank
+			snippet(content, 3, '>>>', '<<<', '...', 40),
+			COALESCE(m.summary, ''),
+			content.rank
 		FROM content
 		LEFT JOIN content_meta m ON content.domain = m.domain AND content.path = m.path
 		WHERE %s
 		ORDER BY content.rank
-		LIMIT ?
+		LIMIT ? OFFSET ?
 	`, where)
 
 	rows, err := idx.db.Query(q, args...)
@@ -178,7 +190,7 @@ func (idx *Index) Search(query string, opts SearchOpts) ([]SearchHit, error) {
 	var hits []SearchHit
 	for rows.Next() {
 		var h SearchHit
-		if err := rows.Scan(&h.Domain, &h.Path, &h.ContentType, &h.Category, &h.Snippet, &h.Rank); err != nil {
+		if err := rows.Scan(&h.Domain, &h.Path, &h.ContentType, &h.Category, &h.Snippet, &h.Summary, &h.Rank); err != nil {
 			return nil, fmt.Errorf("scanning result: %w", err)
 		}
 		hits = append(hits, h)
@@ -268,10 +280,39 @@ func (idx *Index) GetCategory(domain, urlPath string) (string, error) {
 }
 
 // SetCategory overrides the category for a specific file (agent feedback).
+// The override is marked as user-set so re-indexing preserves it.
 func (idx *Index) SetCategory(domain, urlPath, category string) error {
 	res, err := idx.db.Exec(
-		"UPDATE content_meta SET category = ? WHERE domain = ? AND path = ?",
+		"UPDATE content_meta SET category = ?, user_category = 1 WHERE domain = ? AND path = ?",
 		category, domain, urlPath,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("no indexed file %s%s", domain, urlPath)
+	}
+	return nil
+}
+
+// GetSummary returns the agent-submitted summary for a file, if any.
+func (idx *Index) GetSummary(domain, urlPath string) (summary, summaryAt string, err error) {
+	err = idx.db.QueryRow(
+		"SELECT summary, summary_at FROM content_meta WHERE domain = ? AND path = ?",
+		domain, urlPath,
+	).Scan(&summary, &summaryAt)
+	if err != nil {
+		return "", "", nil
+	}
+	return summary, summaryAt, nil
+}
+
+// SetSummary stores an agent-submitted summary for a file.
+func (idx *Index) SetSummary(domain, urlPath, summary string) error {
+	res, err := idx.db.Exec(
+		"UPDATE content_meta SET summary = ?, summary_at = datetime('now') WHERE domain = ? AND path = ?",
+		summary, domain, urlPath,
 	)
 	if err != nil {
 		return err

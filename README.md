@@ -1,37 +1,38 @@
-# llmshadow
+# doctrove
 
 A central store for LLM-targeted documentation. Discovers, mirrors, and indexes content from sites that publish `llms.txt`, companion `.html.md` files, and related formats. Designed for developers who want local, searchable access to LLM-friendly docs — and for AI agents that need to find and read them.
 
 ## Install
 
 ```bash
-make install                   # builds and installs to /usr/local/bin
-llmshadow mcp-config           # shows config to add to your agent
+make install                   # builds and installs to $GOBIN
+make init-workspace            # creates ~/.config/doctrove with default config
+doctrove mcp-config            # shows config to add to your agent
 ```
 
-Workspace defaults to `~/.config/llmshadow`. Override with `--dir` or `LLMSHADOW_DIR`.
+Workspace defaults to `~/.config/doctrove`. Override with `--dir` or `DOCTROVE_DIR`.
 
 ## Quick Start
 
 ```bash
 # Discover what a site has
-llmshadow discover https://stripe.com
+doctrove discover https://stripe.com
 
 # Grab it (init + sync in one step)
-llmshadow grab https://supabase.com
+doctrove grab https://supabase.com
 
 # Search across all mirrored content
-llmshadow search "authentication"
+doctrove search "authentication"
 
 # Search only API docs
-llmshadow search --category api-reference "webhooks"
+doctrove search --category api-reference "webhooks"
 
 # Refresh to pick up changes (uses ETag caching)
-llmshadow refresh supabase.com
+doctrove refresh supabase.com
 
 # See what you have
-llmshadow catalog
-llmshadow stats
+doctrove catalog
+doctrove stats
 ```
 
 ## Commands
@@ -63,14 +64,15 @@ All commands support `--json` for machine-readable output.
 Generate your config snippet:
 
 ```bash
-llmshadow mcp-config
+doctrove mcp-config
 ```
 
-Add the `mcpServers` entry to your agent's config file:
+Add the `mcpServers` entry to the appropriate config file:
 
 | Agent | Config File |
 |---|---|
-| Claude Code | `~/.claude.json` (user scope) or `.mcp.json` (project scope) |
+| Claude Code (user scope) | `~/.claude.json` |
+| Claude Code (project scope) | `.mcp.json` (project root) |
 | Cursor | `.cursor/mcp.json` (project root) |
 
 Example config:
@@ -78,37 +80,54 @@ Example config:
 ```json
 {
   "mcpServers": {
-    "llmshadow": {
-      "command": "/usr/local/bin/llmshadow",
-      "args": ["mcp", "--dir", "/Users/you/.config/llmshadow"]
+    "doctrove": {
+      "command": "/usr/local/bin/doctrove",
+      "args": ["mcp", "--dir", "/Users/you/.config/doctrove"]
     }
   }
 }
 ```
 
-### Tools (15)
+### Tools (18)
 
 | Tool | Description |
 |---|---|
-| `shadow_discover` | Probe a URL for LLM content |
-| `shadow_scan` | Add and sync a site (`content_types` param to filter) |
-| `shadow_refresh` | Re-sync a tracked site, using ETag caching |
-| `shadow_search` | Full-text search with `category` filter |
-| `shadow_search_full` | Search and return full content of best match |
-| `shadow_tag` | Override category for a file (agent feedback) |
-| `shadow_read` | Read a file with freshness metadata |
-| `shadow_list` | List tracked sites |
-| `shadow_list_files` | Enumerate files with path, size, content type, and category |
-| `shadow_catalog` | Site summaries with topics |
-| `shadow_stats` | Workspace statistics |
-| `shadow_status` | Sync status for a site |
-| `shadow_history` | Git change history |
-| `shadow_diff` | Content changes between refs |
-| `shadow_remove` | Stop tracking a site |
+| `trove_discover` | Probe a URL for LLM content |
+| `trove_scan` | Add and sync a site (`content_types` param to filter; persisted for refresh) |
+| `trove_refresh` | Re-sync a tracked site, using ETag caching (honours content_types filter) |
+| `trove_check` | Dry-run: show available content without downloading |
+| `trove_search` | Full-text search with `category` filter; results include summaries when available |
+| `trove_search_full` | Search and return full content of best match (large — prefer outline+section read) |
+| `trove_outline` | Get heading structure / table of contents for a file with section sizes |
+| `trove_read` | Read a file or specific section by heading match (`section` param) |
+| `trove_summarize` | Store an agent-written summary for a file (visible in search results and outlines) |
+| `trove_tag` | Override category for a file (persists across re-syncs) |
+| `trove_list` | List tracked sites |
+| `trove_list_files` | Enumerate files with path, size, content type, and category (paginated) |
+| `trove_catalog` | Site summaries with topics |
+| `trove_stats` | Workspace statistics |
+| `trove_status` | Sync status, category breakdown, and staleness for a site |
+| `trove_history` | Git change history |
+| `trove_diff` | Content changes between refs |
+| `trove_remove` | Stop tracking a site |
+
+### Context-Efficient Workflow
+
+The tools are designed for hierarchical drill-down to minimize context usage:
+
+```
+trove_catalog          → which site has docs on my topic?
+trove_search           → which files are relevant? (check summaries first)
+trove_outline          → what sections does this file have? (+ summary if cached)
+trove_read section=X   → read just the section I need
+trove_summarize        → cache a summary so the next agent doesn't re-read
+```
+
+**Agent feedback loop:** `trove_tag` and `trove_summarize` are persistent — they survive re-syncs and help all future agents. If you read a large file, summarize it. If a category is wrong, fix it. These small investments compound across sessions.
 
 ## Content Discovery
 
-llmshadow probes multiple sources for LLM-targeted content:
+doctrove probes multiple sources for LLM-targeted content:
 
 - **Well-known paths:** `/llms.txt`, `/llms-full.txt`, `/llms-ctx.txt`, `/llms-ctx-full.txt`, `/ai.txt`
 - **Companion files:** URLs referenced in llms.txt (markdown links followed permissively)
@@ -134,14 +153,14 @@ Every indexed file is assigned a semantic category for task-appropriate filterin
 | `context7` | Content fetched via Context7 API |
 | `other` | Index files, unclassified companions |
 
-Categories are assigned by path heuristics (fast) with body analysis as fallback. Agents can override with `shadow_tag` / `llmshadow tag`.
+Categories are assigned by path heuristics (fast) with body analysis as fallback. Agents can override with `trove_tag` / `doctrove tag`.
 
 ```bash
 # Search only API docs
-llmshadow search --category api-reference "hooks"
+doctrove search --category api-reference "hooks"
 
 # Fix a misclassified page
-llmshadow tag stripe.com /payments marketing
+doctrove tag stripe.com /payments marketing
 ```
 
 ## ETag Caching
@@ -149,12 +168,12 @@ llmshadow tag stripe.com /payments marketing
 Re-syncs use HTTP conditional requests (`If-None-Match`, `If-Modified-Since`) to skip unchanged files. Cache headers are stored per-file in the index. Use `refresh` to take advantage of this:
 
 ```bash
-llmshadow refresh modelcontextprotocol.io   # only downloads changed files
+doctrove refresh modelcontextprotocol.io   # only downloads changed files
 ```
 
 ## Configuration
 
-`llmshadow.yaml` in the workspace root:
+`doctrove.yaml` in the workspace root:
 
 ```yaml
 settings:
@@ -162,7 +181,7 @@ settings:
   rate_burst: 5            # burst capacity
   timeout: 30s             # HTTP timeout
   max_probes: 100          # companion probes per llms.txt
-  user_agent: "llmshadow/0.1"
+  user_agent: "doctrove/0.1"
   events_url: http://localhost:6060/events    # optional eventrelay integration
   context7_api_key: ctx7sk-...                # optional Context7 API key
 
@@ -179,7 +198,7 @@ sites:
 ## Global Flags
 
 ```
---dir string         workspace directory (default ~/.config/llmshadow)
+--dir string         workspace directory (default ~/.config/doctrove)
 --json               output as JSON
 --respect-robots     respect robots.txt AI crawler directives (off by default)
 ```
@@ -190,13 +209,13 @@ Content is stored as plain files under `sites/<domain>/`, tracked by git for cha
 
 ## Event Relay Integration
 
-When `events_url` is configured, llmshadow emits structured events to an [eventrelay](../eventrelay) server for real-time observability. Events follow the full eventrelay schema:
+When `events_url` is configured, doctrove emits structured events to an [eventrelay](../eventrelay) server for real-time observability. Events follow the full eventrelay schema:
 
 ```json
 {
-  "source": "llmshadow",
+  "source": "doctrove",
   "channel": "mcp",
-  "action": "shadow_search",
+  "action": "trove_search",
   "level": "info",
   "agent_id": "myproject:00a3f1",
   "duration_ms": 42,
@@ -207,9 +226,9 @@ When `events_url` is configured, llmshadow emits structured events to an [eventr
 
 | Field | Description |
 |---|---|
-| `source` | Always `llmshadow` |
+| `source` | Always `doctrove` |
 | `channel` | `mcp` for MCP tool calls, `sync` for engine operations (init, sync, discover, remove) |
-| `action` | Tool or operation name (e.g. `shadow_search`, `sync`, `init`) |
+| `action` | Tool or operation name (e.g. `trove_search`, `sync`, `init`) |
 | `level` | `info` normally, `error` on failure, `warn` on partial errors |
 | `agent_id` | Auto-derived from working directory + PID (e.g. `myproject:00a3f1`) |
 | `duration_ms` | Operation wall time (top-level, displayed inline in the dashboard) |

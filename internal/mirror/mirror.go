@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/dmoose/llmshadow/internal/discovery"
-	"github.com/dmoose/llmshadow/internal/fetcher"
-	"github.com/dmoose/llmshadow/internal/store"
+	"github.com/dmoose/doctrove/internal/discovery"
+	"github.com/dmoose/doctrove/internal/fetcher"
+	"github.com/dmoose/doctrove/internal/store"
 )
 
 // Mirror downloads discovered content and writes it to the store.

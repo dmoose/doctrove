@@ -28,7 +28,7 @@ var initCmd = &cobra.Command{
 
 		fmt.Printf("Tracking %s (%s)\n", info.Domain, info.URL)
 		fmt.Printf("Discovered %d LLM content files\n", info.FileCount)
-		fmt.Println("Run 'llmshadow sync' to download content.")
+		fmt.Println("Run 'doctrove sync' to download content.")
 		return nil
 	},
 }

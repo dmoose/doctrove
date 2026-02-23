@@ -8,14 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dmoose/llmshadow/internal/config"
-	"github.com/dmoose/llmshadow/internal/discovery"
-	"github.com/dmoose/llmshadow/internal/events"
-	"github.com/dmoose/llmshadow/internal/fetcher"
-	"github.com/dmoose/llmshadow/internal/lockfile"
-	"github.com/dmoose/llmshadow/internal/mirror"
-	"github.com/dmoose/llmshadow/internal/robots"
-	"github.com/dmoose/llmshadow/internal/store"
+	"github.com/dmoose/doctrove/internal/config"
+	"github.com/dmoose/doctrove/internal/discovery"
+	"github.com/dmoose/doctrove/internal/events"
+	"github.com/dmoose/doctrove/internal/fetcher"
+	"github.com/dmoose/doctrove/internal/lockfile"
+	"github.com/dmoose/doctrove/internal/mirror"
+	"github.com/dmoose/doctrove/internal/robots"
+	"github.com/dmoose/doctrove/internal/store"
 )
 
 // Engine is the core orchestrator that ties all subsystems together.
@@ -70,7 +70,7 @@ func New(rootDir string, opts ...Options) (*Engine, error) {
 		rc = robots.New(f)
 	}
 
-	em := events.New(cfg.Settings.EventsURL, "llmshadow")
+	em := events.New(cfg.Settings.EventsURL, "doctrove")
 
 	disc := discovery.New(f, rc, cfg.Settings.MaxProbes)
 
@@ -94,10 +94,13 @@ func New(rootDir string, opts ...Options) (*Engine, error) {
 
 // SiteInfo is returned when listing or describing a site.
 type SiteInfo struct {
-	Domain    string    `json:"domain"`
-	URL       string    `json:"url"`
-	LastSync  time.Time `json:"last_sync"`
-	FileCount int       `json:"file_count"`
+	Domain         string         `json:"domain"`
+	URL            string         `json:"url"`
+	LastSync       time.Time      `json:"last_sync"`
+	FileCount      int            `json:"file_count"`
+	ContentTypes   string         `json:"content_types,omitempty"`
+	Age            string         `json:"age,omitempty"`
+	CategoryCounts map[string]int `json:"categories,omitempty"`
 }
 
 // SyncResult wraps the mirror result with config updates.
@@ -245,10 +248,12 @@ func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
 	return sr, nil
 }
 
-// SyncWithContentTypes syncs only files matching the given content types
-// (comma-separated, e.g. "llms-txt,llms-full-txt"). This lets agents skip
-// companion pages when they only need the index files.
-func (e *Engine) SyncWithContentTypes(ctx context.Context, domain, contentTypes string) (*SyncResult, error) {
+// parseContentTypes splits a comma-separated content types string into a
+// set for filtering. Returns nil if empty (meaning "allow all").
+func parseContentTypes(contentTypes string) map[string]bool {
+	if contentTypes == "" {
+		return nil
+	}
 	allowed := make(map[string]bool)
 	for _, ct := range strings.Split(contentTypes, ",") {
 		ct = strings.TrimSpace(ct)
@@ -257,6 +262,18 @@ func (e *Engine) SyncWithContentTypes(ctx context.Context, domain, contentTypes 
 		}
 	}
 	if len(allowed) == 0 {
+		return nil
+	}
+	return allowed
+}
+
+// SyncWithContentTypes syncs only files matching the given content types
+// (comma-separated, e.g. "llms-txt,llms-full-txt"). This lets agents skip
+// companion pages when they only need the index files. The filter is persisted
+// in the site config so that Refresh honours it.
+func (e *Engine) SyncWithContentTypes(ctx context.Context, domain, contentTypes string) (*SyncResult, error) {
+	allowed := parseContentTypes(contentTypes)
+	if allowed == nil {
 		return e.Sync(ctx, domain)
 	}
 
@@ -271,6 +288,9 @@ func (e *Engine) SyncWithContentTypes(ctx context.Context, domain, contentTypes 
 	if !ok {
 		return nil, fmt.Errorf("site %q not tracked — run init first", domain)
 	}
+
+	// Persist content_types so Refresh honours the same filter
+	siteCfg.ContentTypes = contentTypes
 
 	result, err := e.Discovery.Discover(ctx, siteCfg.URL)
 	if err != nil {
@@ -388,7 +408,7 @@ func (e *Engine) providerFor(input string) string {
 	return "none"
 }
 
-// Status returns info about a tracked site.
+// Status returns info about a tracked site including category breakdown and age.
 func (e *Engine) Status(ctx context.Context, domain string) (*SiteInfo, error) {
 	siteCfg, ok := e.Config.Sites[domain]
 	if !ok {
@@ -400,13 +420,25 @@ func (e *Engine) Status(ctx context.Context, domain string) (*SiteInfo, error) {
 		return nil, fmt.Errorf("counting files: %w", err)
 	}
 
+	cats, _ := e.Index.CategoryCounts(domain)
+
+	var age string
+	if !siteCfg.LastSync.IsZero() {
+		age = humanAge(time.Since(siteCfg.LastSync))
+	}
+
 	return &SiteInfo{
-		Domain:    domain,
-		URL:       siteCfg.URL,
-		LastSync:  siteCfg.LastSync,
-		FileCount: count,
+		Domain:         domain,
+		URL:            siteCfg.URL,
+		LastSync:       siteCfg.LastSync,
+		FileCount:      count,
+		ContentTypes:   siteCfg.ContentTypes,
+		Age:            age,
+		CategoryCounts: cats,
 	}, nil
 }
+
+// humanAge is defined in stats.go
 
 // List returns info about all tracked sites.
 func (e *Engine) List(ctx context.Context) ([]SiteInfo, error) {
@@ -472,12 +504,13 @@ type SearchResult struct {
 }
 
 // Search performs a full-text search across indexed content.
-func (e *Engine) Search(ctx context.Context, query string, site, contentType, category string, limit int) (*SearchResult, error) {
+func (e *Engine) Search(ctx context.Context, query string, site, contentType, category string, limit, offset int) (*SearchResult, error) {
 	hits, err := e.Index.Search(query, store.SearchOpts{
 		Site:        site,
 		ContentType: contentType,
 		Category:    category,
 		Limit:       limit,
+		Offset:      offset,
 	})
 	if err != nil {
 		return nil, err
@@ -485,14 +518,14 @@ func (e *Engine) Search(ctx context.Context, query string, site, contentType, ca
 
 	result := &SearchResult{Hits: hits}
 	if len(hits) == 0 {
-		result.Suggestion = "No local results. Use shadow_discover to check if a URL has LLM content, or shadow_scan to add and sync a site."
+		result.Suggestion = "No local results. Use trove_discover to check if a URL has LLM content, or trove_scan to add and sync a site."
 	}
 	return result, nil
 }
 
 // SearchFull searches and returns the full content of the top hit.
 func (e *Engine) SearchFull(ctx context.Context, query string, site, contentType, category string) (*SearchFullResult, error) {
-	sr, err := e.Search(ctx, query, site, contentType, category, 1)
+	sr, err := e.Search(ctx, query, site, contentType, category, 1, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -613,13 +646,164 @@ func (e *Engine) Tag(ctx context.Context, domain, path, category string) error {
 	return e.Index.SetCategory(domain, path, category)
 }
 
-// Refresh re-syncs a tracked site without re-discovering. Uses cached ETags
-// for conditional fetching. This is the "update what's changed" operation.
+// Refresh re-syncs a tracked site. If content_types was set during the
+// original scan, Refresh honours that filter so it doesn't pull content
+// the agent intentionally excluded. Uses cached ETags for conditional
+// fetching.
 func (e *Engine) Refresh(ctx context.Context, domain string) (*SyncResult, error) {
-	// Refresh delegates to Sync which already handles ETag caching.
-	// The distinction is semantic — refresh is for agents that want to
-	// update an already-tracked site without the "init" connotation.
+	siteCfg, ok := e.Config.Sites[domain]
+	if !ok {
+		return nil, fmt.Errorf("site %q not tracked", domain)
+	}
+	if siteCfg.ContentTypes != "" {
+		return e.SyncWithContentTypes(ctx, domain, siteCfg.ContentTypes)
+	}
 	return e.Sync(ctx, domain)
+}
+
+// OutlineEntry represents a heading in a document's structure.
+type OutlineEntry struct {
+	Heading string `json:"heading"`
+	Level   int    `json:"level"`
+	Line    int    `json:"line"`
+	Size    int    `json:"size_chars"` // characters in this section (until next heading of same/higher level)
+}
+
+// OutlineResult is the table of contents for a file.
+type OutlineResult struct {
+	Domain    string         `json:"domain"`
+	Path      string         `json:"path"`
+	TotalSize int            `json:"total_size"`
+	Summary   string         `json:"summary,omitempty"`
+	Sections  []OutlineEntry `json:"sections"`
+}
+
+// Outline parses a mirrored file and returns its heading structure.
+func (e *Engine) Outline(ctx context.Context, domain, path string) (*OutlineResult, error) {
+	body, err := e.Store.ReadContent(domain, path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s%s: %w", domain, path, err)
+	}
+
+	content := string(body)
+	lines := strings.Split(content, "\n")
+
+	var sections []OutlineEntry
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		level := 0
+		for _, c := range trimmed {
+			if c == '#' {
+				level++
+			} else {
+				break
+			}
+		}
+		if level > 0 && level <= 6 {
+			heading := strings.TrimSpace(trimmed[level:])
+			if heading != "" {
+				sections = append(sections, OutlineEntry{
+					Heading: heading,
+					Level:   level,
+					Line:    i + 1, // 1-based
+				})
+			}
+		}
+	}
+
+	// Compute section sizes: chars from this heading to the next heading of same/higher level
+	for i := range sections {
+		startLine := sections[i].Line - 1 // back to 0-based
+		var endLine int
+		if i+1 < len(sections) {
+			endLine = sections[i+1].Line - 1
+		} else {
+			endLine = len(lines)
+		}
+		size := 0
+		for l := startLine; l < endLine && l < len(lines); l++ {
+			size += len(lines[l]) + 1
+		}
+		sections[i].Size = size
+	}
+
+	summary, _, _ := e.Index.GetSummary(domain, path)
+
+	return &OutlineResult{
+		Domain:    domain,
+		Path:      path,
+		TotalSize: len(content),
+		Summary:   summary,
+		Sections:  sections,
+	}, nil
+}
+
+// ReadSection reads a specific section of a file by heading match, or a line range.
+// If section is non-empty, returns content from that heading to the next heading of same/higher level.
+// If section is empty and maxLines > 0, returns the first maxLines lines.
+func (e *Engine) ReadSection(ctx context.Context, domain, path, section string, maxLines int) (string, error) {
+	body, err := e.Store.ReadContent(domain, path)
+	if err != nil {
+		return "", fmt.Errorf("reading %s%s: %w", domain, path, err)
+	}
+
+	content := string(body)
+	if section == "" && maxLines <= 0 {
+		return content, nil
+	}
+
+	lines := strings.Split(content, "\n")
+
+	if section != "" {
+		sectionLower := strings.ToLower(section)
+		startIdx := -1
+		startLevel := 0
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if !strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			level := 0
+			for _, c := range trimmed {
+				if c == '#' {
+					level++
+				} else {
+					break
+				}
+			}
+			heading := strings.TrimSpace(trimmed[level:])
+			if startIdx == -1 {
+				if strings.Contains(strings.ToLower(heading), sectionLower) {
+					startIdx = i
+					startLevel = level
+				}
+			} else {
+				// Found the start — look for end (same or higher level heading)
+				if level <= startLevel {
+					result := strings.Join(lines[startIdx:i], "\n")
+					return result, nil
+				}
+			}
+		}
+		if startIdx >= 0 {
+			return strings.Join(lines[startIdx:], "\n"), nil
+		}
+		return "", fmt.Errorf("section %q not found in %s%s", section, domain, path)
+	}
+
+	// Line-limited read
+	if maxLines > len(lines) {
+		maxLines = len(lines)
+	}
+	return strings.Join(lines[:maxLines], "\n"), nil
+}
+
+// Summarize stores an agent-submitted summary for a file.
+func (e *Engine) Summarize(ctx context.Context, domain, path, summary string) error {
+	return e.Index.SetSummary(domain, path, summary)
 }
 
 // Close releases resources held by the engine.

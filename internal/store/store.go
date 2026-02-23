@@ -10,7 +10,7 @@ import (
 
 // Store manages the filesystem layout for mirrored content.
 type Store struct {
-	Root string // Root directory of the llmshadow workspace
+	Root string // Root directory of the doctrove workspace
 }
 
 // New creates a Store rooted at the given directory.

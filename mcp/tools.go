@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/dmoose/llmshadow/internal/engine"
+	"github.com/dmoose/doctrove/internal/engine"
 	gomcp "github.com/mark3labs/mcp-go/mcp"
 )
 
-// --- shadow_discover ---
+// --- trove_discover ---
 
 func discoverTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_discover",
+	return gomcp.NewTool("trove_discover",
 		gomcp.WithDescription("Probe a URL for LLM-targeted content (llms.txt, companions) without saving anything locally"),
 		gomcp.WithString("url",
 			gomcp.Required(),
@@ -37,10 +37,10 @@ func discoverHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_scan ---
+// --- trove_scan ---
 
 func scanTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_scan",
+	return gomcp.NewTool("trove_scan",
 		gomcp.WithDescription("Add a site and download its LLM content (init + sync)"),
 		gomcp.WithString("url",
 			gomcp.Required(),
@@ -88,11 +88,11 @@ func scanHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_search ---
+// --- trove_search ---
 
 func searchTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_search",
-		gomcp.WithDescription("Full-text search across all mirrored LLM content"),
+	return gomcp.NewTool("trove_search",
+		gomcp.WithDescription("Full-text search across all mirrored LLM content. Results include summaries when available (submitted via trove_summarize) — check these before reading full files. Recommended workflow: search → check summaries → trove_outline for structure → trove_read with section filter for targeted content."),
 		gomcp.WithString("query",
 			gomcp.Required(),
 			gomcp.Description("Search query (supports FTS5 syntax)"),
@@ -109,6 +109,9 @@ func searchTool() gomcp.Tool {
 		gomcp.WithNumber("limit",
 			gomcp.Description("Max number of results (default 20)"),
 		),
+		gomcp.WithNumber("offset",
+			gomcp.Description("Skip first N results for pagination (default 0)"),
+		),
 	)
 }
 
@@ -124,6 +127,7 @@ func searchHandler(e *engine.Engine) server_handler {
 			stringArg(req, "content_type", ""),
 			stringArg(req, "category", ""),
 			intArg(req, "limit", 20),
+			intArg(req, "offset", 0),
 		)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
@@ -133,11 +137,11 @@ func searchHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_search_full ---
+// --- trove_search_full ---
 
 func searchFullTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_search_full",
-		gomcp.WithDescription("Search and return the full content of the best matching file — use this when you need complete documentation, not just a snippet"),
+	return gomcp.NewTool("trove_search_full",
+		gomcp.WithDescription("Search and return the full content of the best matching file. WARNING: can return very large results (100KB+). Prefer trove_search → trove_outline → trove_read with section filter for context-efficient access. Use this only when you genuinely need the entire file. After reading, call trove_summarize to cache a summary for future agents."),
 		gomcp.WithString("query",
 			gomcp.Required(),
 			gomcp.Description("Search query"),
@@ -174,10 +178,10 @@ func searchFullHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_list ---
+// --- trove_list ---
 
 func listTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_list",
+	return gomcp.NewTool("trove_list",
 		gomcp.WithDescription("List all tracked sites with sync status and file counts"),
 	)
 }
@@ -192,11 +196,11 @@ func listHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_read ---
+// --- trove_read ---
 
 func readTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_read",
-		gomcp.WithDescription("Read a specific mirrored file by domain and path"),
+	return gomcp.NewTool("trove_read",
+		gomcp.WithDescription("Read a mirrored file by domain and path. Use 'section' to read just one heading's content instead of the whole file (saves context). Use trove_outline first to see available sections. After reading a large file, call trove_summarize to cache a summary so future agents can avoid re-reading it."),
 		gomcp.WithString("site",
 			gomcp.Required(),
 			gomcp.Description("The domain (e.g. stripe.com)"),
@@ -204,6 +208,12 @@ func readTool() gomcp.Tool {
 		gomcp.WithString("path",
 			gomcp.Required(),
 			gomcp.Description("The URL path of the file (e.g. /llms.txt)"),
+		),
+		gomcp.WithString("section",
+			gomcp.Description("Read only the section matching this heading (case-insensitive substring match). Returns content from that heading to the next heading of same/higher level."),
+		),
+		gomcp.WithNumber("max_lines",
+			gomcp.Description("Limit output to first N lines (useful for previewing large files)"),
 		),
 	)
 }
@@ -216,31 +226,43 @@ func readHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError("site and path are required"), nil
 		}
 
-		data, err := e.Store.ReadContent(site, path)
+		section := stringArg(req, "section", "")
+		maxLines := intArg(req, "max_lines", 0)
+
+		content, err := e.ReadSection(ctx, site, path, section, maxLines)
 		if err != nil {
 			return gomcp.NewToolResultError(fmt.Sprintf("reading %s%s: %v", site, path, err)), nil
 		}
 
-		// Include freshness metadata so the agent knows how current the content is
 		lastSync := "unknown"
 		if siteCfg, ok := e.Config.Sites[site]; ok && !siteCfg.LastSync.IsZero() {
 			lastSync = siteCfg.LastSync.Format("2006-01-02T15:04:05Z07:00")
 		}
 
-		return jsonResult(map[string]any{
+		summary, _, _ := e.Index.GetSummary(site, path)
+
+		result := map[string]any{
 			"domain":    site,
 			"path":      path,
-			"size":      len(data),
+			"size":      len(content),
 			"last_sync": lastSync,
-			"content":   string(data),
-		})
+			"content":   content,
+		}
+		if summary != "" {
+			result["summary"] = summary
+		}
+		if section != "" {
+			result["section"] = section
+		}
+
+		return jsonResult(result)
 	}
 }
 
-// --- shadow_status ---
+// --- trove_status ---
 
 func statusTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_status",
+	return gomcp.NewTool("trove_status",
 		gomcp.WithDescription("Get sync status and file count for a tracked site"),
 		gomcp.WithString("site",
 			gomcp.Required(),
@@ -265,10 +287,10 @@ func statusHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_diff ---
+// --- trove_diff ---
 
 func diffTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_diff",
+	return gomcp.NewTool("trove_diff",
 		gomcp.WithDescription("Show content changes between git refs (defaults to last change)"),
 		gomcp.WithString("from",
 			gomcp.Description("Start ref (e.g. HEAD~2). Omit for parent of 'to'"),
@@ -305,10 +327,10 @@ func diffHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_history ---
+// --- trove_history ---
 
 func historyTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_history",
+	return gomcp.NewTool("trove_history",
 		gomcp.WithDescription("Show git change history, optionally filtered to a site"),
 		gomcp.WithString("site",
 			gomcp.Description("Filter to a specific domain"),
@@ -333,14 +355,20 @@ func historyHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_list_files ---
+// --- trove_list_files ---
 
 func listFilesTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_list_files",
-		gomcp.WithDescription("List all mirrored files for a site with path, size, and content type"),
+	return gomcp.NewTool("trove_list_files",
+		gomcp.WithDescription("List mirrored files for a site with path, size, content type, and category. Use limit/offset to paginate large sites. For exploring what a site contains, try trove_catalog first (lighter), then list_files for detail."),
 		gomcp.WithString("site",
 			gomcp.Required(),
 			gomcp.Description("The domain (e.g. stripe.com)"),
+		),
+		gomcp.WithNumber("limit",
+			gomcp.Description("Max files to return (default 100, 0 = all)"),
+		),
+		gomcp.WithNumber("offset",
+			gomcp.Description("Skip first N files for pagination (default 0)"),
 		),
 	)
 }
@@ -357,14 +385,28 @@ func listFilesHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
+		offset := intArg(req, "offset", 0)
+		limit := intArg(req, "limit", 100)
+
+		if offset > 0 {
+			if offset >= len(files) {
+				files = nil
+			} else {
+				files = files[offset:]
+			}
+		}
+		if limit > 0 && limit < len(files) {
+			files = files[:limit]
+		}
+
 		return jsonResult(files)
 	}
 }
 
-// --- shadow_remove ---
+// --- trove_remove ---
 
 func removeTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_remove",
+	return gomcp.NewTool("trove_remove",
 		gomcp.WithDescription("Stop tracking a site, remove files and index entries"),
 		gomcp.WithString("site",
 			gomcp.Required(),
@@ -392,10 +434,10 @@ func removeHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_catalog ---
+// --- trove_catalog ---
 
 func catalogTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_catalog",
+	return gomcp.NewTool("trove_catalog",
 		gomcp.WithDescription("Get a compact summary of all tracked sites with titles, descriptions, and topic areas — use this to find which site has docs for a topic"),
 	)
 }
@@ -410,10 +452,10 @@ func catalogHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_stats ---
+// --- trove_stats ---
 
 func statsTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_stats",
+	return gomcp.NewTool("trove_stats",
 		gomcp.WithDescription("Get workspace statistics: total sites, files, disk usage, and sync freshness"),
 	)
 }
@@ -428,11 +470,11 @@ func statsHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_tag ---
+// --- trove_tag ---
 
 func tagTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_tag",
-		gomcp.WithDescription("Override the category for a mirrored file — use this to correct misclassified pages (e.g. a marketing page wrongly tagged as api-reference)"),
+	return gomcp.NewTool("trove_tag",
+		gomcp.WithDescription("Override the category for a mirrored file. This is a persistent correction — it survives re-syncs and helps all future agents filter search results accurately. If you notice a page is miscategorized (e.g. a spec page tagged as marketing), fix it now so future searches work better."),
 		gomcp.WithString("site",
 			gomcp.Required(),
 			gomcp.Description("The domain (e.g. stripe.com)"),
@@ -470,10 +512,38 @@ func tagHandler(e *engine.Engine) server_handler {
 	}
 }
 
-// --- shadow_refresh ---
+// --- trove_check ---
+
+func checkTool() gomcp.Tool {
+	return gomcp.NewTool("trove_check",
+		gomcp.WithDescription("Dry-run: probe a tracked site for available content without downloading — use this to preview what a sync would fetch"),
+		gomcp.WithString("site",
+			gomcp.Required(),
+			gomcp.Description("The domain to check (e.g. stripe.com)"),
+		),
+	)
+}
+
+func checkHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		site := stringArg(req, "site", "")
+		if site == "" {
+			return gomcp.NewToolResultError("site is required"), nil
+		}
+
+		result, err := e.Check(ctx, site)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return jsonResult(result)
+	}
+}
+
+// --- trove_refresh ---
 
 func refreshTool() gomcp.Tool {
-	return gomcp.NewTool("shadow_refresh",
+	return gomcp.NewTool("trove_refresh",
 		gomcp.WithDescription("Re-sync a tracked site to pick up changes — uses cached ETags to skip unchanged files"),
 		gomcp.WithString("site",
 			gomcp.Required(),
@@ -501,6 +571,80 @@ func refreshHandler(e *engine.Engine) server_handler {
 			"skipped":   len(result.Skipped),
 			"errors":    result.Errors,
 			"sync_time": result.SyncTime,
+		})
+	}
+}
+
+// --- trove_outline ---
+
+func outlineTool() gomcp.Tool {
+	return gomcp.NewTool("trove_outline",
+		gomcp.WithDescription("Get the heading structure (table of contents) of a mirrored file with section sizes. Use this BEFORE trove_read to identify which section you need, then read just that section. If a summary exists (from a previous trove_summarize call), it is included — check if the summary answers your question before reading the full content."),
+		gomcp.WithString("site",
+			gomcp.Required(),
+			gomcp.Description("The domain (e.g. stripe.com)"),
+		),
+		gomcp.WithString("path",
+			gomcp.Required(),
+			gomcp.Description("The URL path of the file (e.g. /llms.txt)"),
+		),
+	)
+}
+
+func outlineHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		site := stringArg(req, "site", "")
+		path := stringArg(req, "path", "")
+		if site == "" || path == "" {
+			return gomcp.NewToolResultError("site and path are required"), nil
+		}
+
+		result, err := e.Outline(ctx, site, path)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return jsonResult(result)
+	}
+}
+
+// --- trove_summarize ---
+
+func summarizeTool() gomcp.Tool {
+	return gomcp.NewTool("trove_summarize",
+		gomcp.WithDescription("Store a summary for a file you've read. This is an important feedback mechanism: after reading a large file, submit a concise summary (key topics, what the file covers, when to use it). Future agents will see this summary in search results and trove_outline, letting them decide whether to read the full content — saving significant context. Summaries should be 2-5 sentences covering: what the document is about, key topics/APIs it covers, and when an agent would need the full content."),
+		gomcp.WithString("site",
+			gomcp.Required(),
+			gomcp.Description("The domain (e.g. stripe.com)"),
+		),
+		gomcp.WithString("path",
+			gomcp.Required(),
+			gomcp.Description("The URL path of the file (e.g. /docs/api.md)"),
+		),
+		gomcp.WithString("summary",
+			gomcp.Required(),
+			gomcp.Description("A concise summary of the file's content (2-5 sentences). Cover: what it's about, key topics, when to read the full content."),
+		),
+	)
+}
+
+func summarizeHandler(e *engine.Engine) server_handler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		site := stringArg(req, "site", "")
+		path := stringArg(req, "path", "")
+		summary := stringArg(req, "summary", "")
+		if site == "" || path == "" || summary == "" {
+			return gomcp.NewToolResultError("site, path, and summary are required"), nil
+		}
+
+		if err := e.Summarize(ctx, site, path, summary); err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return jsonResult(map[string]string{
+			"site":   site,
+			"path":   path,
+			"status": "summary saved",
 		})
 	}
 }

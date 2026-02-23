@@ -1,4 +1,4 @@
-# llmshadow Design Document
+# doctrove Design Document
 
 A Go tool that discovers, downloads, and maintains local mirrors of websites' LLM-targeted content (llms.txt, companion .html.md files, etc.) with git-based change tracking, full-text search, and an MCP interface for agent access.
 
@@ -35,9 +35,9 @@ Three layers — interfaces, core engine, storage — so CLI, MCP, and Go librar
 ## Package Layout
 
 ```
-llmshadow/
+doctrove/
 ├── cmd/
-│   └── llmshadow/
+│   └── doctrove/
 │       └── main.go              # Entry point
 ├── internal/
 │   ├── engine/
@@ -63,23 +63,23 @@ llmshadow/
 │       └── fetcher.go           # HTTP client: rate limiting, ETags, retries
 ├── cli/
 │   ├── root.go                  # cobra root command
-│   ├── init.go                  # llmshadow init <url>
-│   ├── sync.go                  # llmshadow sync [site|--all]
-│   ├── status.go                # llmshadow status [site]
-│   ├── search.go                # llmshadow search <query> [--site]
-│   ├── list.go                  # llmshadow list [--format json|table]
-│   ├── serve.go                 # llmshadow serve (local HTTP)
-│   ├── check.go                 # llmshadow check [site] (dry-run sync)
-│   ├── discover.go              # llmshadow discover <url>
-│   ├── history.go               # llmshadow history [site]
-│   ├── diff.go                  # llmshadow diff <site> [ref..ref]
-│   └── mcp.go                   # llmshadow mcp (start MCP server)
+│   ├── init.go                  # doctrove init <url>
+│   ├── sync.go                  # doctrove sync [site|--all]
+│   ├── status.go                # doctrove status [site]
+│   ├── search.go                # doctrove search <query> [--site]
+│   ├── list.go                  # doctrove list [--format json|table]
+│   ├── serve.go                 # doctrove serve (local HTTP)
+│   ├── check.go                 # doctrove check [site] (dry-run sync)
+│   ├── discover.go              # doctrove discover <url>
+│   ├── history.go               # doctrove history [site]
+│   ├── diff.go                  # doctrove diff <site> [ref..ref]
+│   └── mcp.go                   # doctrove mcp (start MCP server)
 ├── mcp/
 │   ├── server.go                # MCP server setup, tool registration
 │   └── tools.go                 # MCP tool handlers → engine calls
 ├── go.mod
 ├── go.sum
-└── llmshadow.yaml               # Example config
+└── doctrove.yaml                # Example config
 ```
 
 ## Core Engine Interface
@@ -138,8 +138,8 @@ Discovery is a standalone subsystem. An agent can call `Discover()` to probe a U
 ```
 <root>/
 ├── .git/                        # Git repository for change tracking
-├── llmshadow.yaml               # Configuration
-├── llmshadow.db                 # SQLite FTS5 search index
+├── doctrove.yaml                # Configuration
+├── doctrove.db                  # SQLite FTS5 search index
 ├── sites/
 │   └── <domain>/
 │       ├── llms.txt             # Main index file
@@ -173,41 +173,41 @@ All HTTP goes through `fetcher.Fetcher`:
 - robots.txt respect (configurable)
 - ETag / Last-Modified conditional requests for efficient syncs
 - Retries with exponential backoff
-- User-Agent identification (`llmshadow/<version>`)
+- User-Agent identification (`doctrove/<version>`)
 
 ## MCP Interface
 
-MCP server runs via `llmshadow mcp` using stdio transport. Agents add it to their MCP config directly.
+MCP server runs via `doctrove mcp` using stdio transport. Agents add it to their MCP config directly.
 
 ### Tools Exposed
 
 | Tool | Description | Engine Method |
 |---|---|---|
-| `shadow_discover` | Probe a URL for LLM content without saving | `Engine.Discover()` |
-| `shadow_scan` | Init + sync a new site | `Engine.Init()` + `Engine.Sync()` |
-| `shadow_search` | Full-text search across mirrored content | `Engine.Search()` |
-| `shadow_list` | List all tracked sites with status | `Engine.List()` |
-| `shadow_read` | Read a specific mirrored file | direct file read via `Store` |
-| `shadow_status` | Get sync status and stats for a site | `Engine.Status()` |
-| `shadow_diff` | Show what changed between syncs | `Engine.Diff()` |
+| `trove_discover` | Probe a URL for LLM content without saving | `Engine.Discover()` |
+| `trove_scan` | Init + sync a new site | `Engine.Init()` + `Engine.Sync()` |
+| `trove_search` | Full-text search across mirrored content | `Engine.Search()` |
+| `trove_list` | List all tracked sites with status | `Engine.List()` |
+| `trove_read` | Read a specific mirrored file | direct file read via `Store` |
+| `trove_status` | Get sync status and stats for a site | `Engine.Status()` |
+| `trove_diff` | Show what changed between syncs | `Engine.Diff()` |
 
 ## CLI Commands
 
 ```
-llmshadow init <url>              # Add a site to track
-llmshadow sync [site|--all]       # Download/update content
-llmshadow check [site|--all]      # Dry-run: report what would change
-llmshadow status [site]           # Show tracked sites, last sync, file counts
-llmshadow list [--format json]    # List all tracked sites
-llmshadow search <query>          # Full-text search across all content
-  --site <domain>                 #   scope to one site
-  --type llms-txt|companion|full  #   filter by content type
-llmshadow discover <url>          # Probe a URL without tracking
-llmshadow history [site]          # Show git-based change history
-llmshadow diff <site> [ref..ref]  # Show content changes between syncs
-llmshadow serve [--port 8080]     # Serve mirrored content over HTTP
-llmshadow mcp                     # Start MCP server (stdio)
-llmshadow config                  # Show/edit config
+doctrove init <url>              # Add a site to track
+doctrove sync [site|--all]       # Download/update content
+doctrove check [site|--all]      # Dry-run: report what would change
+doctrove status [site]           # Show tracked sites, last sync, file counts
+doctrove list [--format json]    # List all tracked sites
+doctrove search <query>          # Full-text search across all content
+  --site <domain>                #   scope to one site
+  --type llms-txt|companion|full #   filter by content type
+doctrove discover <url>          # Probe a URL without tracking
+doctrove history [site]          # Show git-based change history
+doctrove diff <site> [ref..ref]  # Show content changes between syncs
+doctrove serve [--port 8080]     # Serve mirrored content over HTTP
+doctrove mcp                     # Start MCP server (stdio)
+doctrove config                  # Show/edit config
 ```
 
 ## Configuration

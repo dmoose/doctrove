@@ -80,7 +80,7 @@ func TestEngineSearchEmpty(t *testing.T) {
 	}
 	defer func() { _ = eng.Close() }()
 
-	sr, err := eng.Search(context.Background(), "anything", "", "", "", 10)
+	sr, err := eng.Search(context.Background(), "anything", "", "", "", 10, 0)
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}

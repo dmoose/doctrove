@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dmoose/llmshadow/internal/fetcher"
-	"github.com/dmoose/llmshadow/internal/robots"
+	"github.com/dmoose/doctrove/internal/fetcher"
+	"github.com/dmoose/doctrove/internal/robots"
 )
 
 // ContentType classifies discovered content.

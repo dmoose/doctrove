@@ -44,7 +44,7 @@ type Options struct {
 // New creates a Fetcher with the given options.
 func New(opts Options) *Fetcher {
 	if opts.UserAgent == "" {
-		opts.UserAgent = "llmshadow/0.1"
+		opts.UserAgent = "doctrove/0.1"
 	}
 	if opts.RatePerHost <= 0 {
 		opts.RatePerHost = 2
