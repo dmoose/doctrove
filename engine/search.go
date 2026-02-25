@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/dmoose/doctrove/internal/store"
+	"github.com/dmoose/doctrove/store"
 )
 
 // SearchHit re-exports store.SearchHit.
@@ -27,11 +27,12 @@ type SearchFullResult struct {
 }
 
 // Search performs a full-text search across indexed content.
-func (e *Engine) Search(ctx context.Context, query string, site, contentType, category string, limit, offset int) (*SearchResult, error) {
+func (e *Engine) Search(ctx context.Context, query string, site, contentType, category, path string, limit, offset int) (*SearchResult, error) {
 	hits, err := e.Index.Search(query, store.SearchOpts{
 		Site:        site,
 		ContentType: contentType,
 		Category:    category,
+		Path:        path,
 		Limit:       limit,
 		Offset:      offset,
 	})
@@ -48,7 +49,7 @@ func (e *Engine) Search(ctx context.Context, query string, site, contentType, ca
 
 // SearchFull searches and returns the full content of the top hit.
 func (e *Engine) SearchFull(ctx context.Context, query string, site, contentType, category string) (*SearchFullResult, error) {
-	sr, err := e.Search(ctx, query, site, contentType, category, 1, 0)
+	sr, err := e.Search(ctx, query, site, contentType, category, "", 1, 0)
 	if err != nil {
 		return nil, err
 	}

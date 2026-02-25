@@ -15,7 +15,7 @@ type Event struct {
 	Action    string         `json:"action"`
 	Level     string         `json:"level,omitempty"`
 	AgentID   string         `json:"agent_id,omitempty"`
-	DurationMS int64         `json:"duration_ms,omitempty"`
+	DurationMS int64         `json:"duration_ms"`
 	Data      map[string]any `json:"data,omitempty"`
 	TS        time.Time      `json:"ts"`
 }

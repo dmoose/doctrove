@@ -21,9 +21,17 @@ func (m *MarkdownProcessor) Outline(text string, maxDepth, maxSections int) Outl
 	lines := strings.Split(text, "\n")
 	var sections []Section
 	truncated := false
+	inCodeBlock := false
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			inCodeBlock = !inCodeBlock
+			continue
+		}
+		if inCodeBlock {
+			continue
+		}
 		if !strings.HasPrefix(trimmed, "#") {
 			continue
 		}
@@ -80,9 +88,17 @@ func (m *MarkdownProcessor) ReadSection(text, sectionName string) (string, error
 	sectionLower := strings.ToLower(sectionName)
 	startIdx := -1
 	startLevel := 0
+	inCodeBlock := false
 
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			inCodeBlock = !inCodeBlock
+			continue
+		}
+		if inCodeBlock {
+			continue
+		}
 		if !strings.HasPrefix(trimmed, "#") {
 			continue
 		}

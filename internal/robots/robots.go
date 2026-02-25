@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dmoose/doctrove/internal/fetcher"
+	"github.com/dmoose/doctrove/fetcher"
 )
 
 // AI-specific user-agents to check in robots.txt.

@@ -1,24 +1,26 @@
 package mirror
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
-	"github.com/dmoose/doctrove/internal/discovery"
-	"github.com/dmoose/doctrove/internal/fetcher"
-	"github.com/dmoose/doctrove/internal/store"
+	"github.com/dmoose/doctrove/discovery"
+	"github.com/dmoose/doctrove/fetcher"
+	"github.com/dmoose/doctrove/store"
 )
 
 // Mirror downloads discovered content and writes it to the store.
 type Mirror struct {
-	Fetcher *fetcher.Fetcher
+	Fetcher fetcher.HTTPFetcher
 	Store   *store.Store
 	Index   store.Indexer
 }
 
 // New creates a Mirror.
-func New(f *fetcher.Fetcher, s *store.Store, idx store.Indexer) *Mirror {
+func New(f fetcher.HTTPFetcher, s *store.Store, idx store.Indexer) *Mirror {
 	return &Mirror{Fetcher: f, Store: s, Index: idx}
 }
 
@@ -37,6 +39,7 @@ type FilterFunc func(path string) bool
 
 // BuildFilter creates a FilterFunc from include/exclude glob patterns.
 // If include is empty, all paths match. Exclude takes precedence.
+// Supports ** for recursive directory matching (e.g. "/docs/**/*.md").
 func BuildFilter(include, exclude []string) FilterFunc {
 	if len(include) == 0 && len(exclude) == 0 {
 		return nil // no filtering
@@ -44,7 +47,7 @@ func BuildFilter(include, exclude []string) FilterFunc {
 	return func(path string) bool {
 		// Check excludes first
 		for _, pattern := range exclude {
-			if matched, _ := filepath.Match(pattern, path); matched {
+			if matchGlob(pattern, path) {
 				return false
 			}
 		}
@@ -54,12 +57,56 @@ func BuildFilter(include, exclude []string) FilterFunc {
 		}
 		// Must match at least one include
 		for _, pattern := range include {
-			if matched, _ := filepath.Match(pattern, path); matched {
+			if matchGlob(pattern, path) {
 				return true
 			}
 		}
 		return false
 	}
+}
+
+// matchGlob matches a path against a glob pattern, supporting ** for recursive
+// directory matching. ** matches zero or more path segments.
+func matchGlob(pattern, path string) bool {
+	// If no **, fall back to filepath.Match
+	if !strings.Contains(pattern, "**") {
+		matched, _ := filepath.Match(pattern, path)
+		return matched
+	}
+
+	// Split on ** and match each segment
+	parts := strings.Split(pattern, "**")
+	if len(parts) == 2 {
+		prefix := parts[0]
+		suffix := parts[1]
+		// prefix must match the start
+		if prefix != "" && !strings.HasPrefix(path, prefix) {
+			return false
+		}
+		// suffix must match the end (using filepath.Match for the tail)
+		remaining := path[len(prefix):]
+		if suffix == "" || suffix == "/" {
+			return true
+		}
+		suffix = strings.TrimPrefix(suffix, "/")
+		// Check if any tail of the remaining path matches the suffix pattern
+		segments := strings.Split(remaining, "/")
+		for i := range segments {
+			tail := strings.Join(segments[i:], "/")
+			if matched, _ := filepath.Match(suffix, tail); matched {
+				return true
+			}
+			// Also try matching just the filename for patterns like **/*.md
+			if matched, _ := filepath.Match(suffix, segments[len(segments)-1]); matched {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Fallback for multiple ** — treat as simple contains
+	matched, _ := filepath.Match(pattern, path)
+	return matched
 }
 
 // Sync downloads all files from a discovery result and writes them to the store.
@@ -111,6 +158,11 @@ func (m *Mirror) Sync(ctx context.Context, result *discovery.Result, filter Filt
 
 			// Convert HTML to markdown if needed
 			if fetcher.IsHTML(resp.ContentType, resp.Body) {
+				// Skip JS-only SPA shells — they need browser rendering we don't have
+				if fetcher.IsJSHeavy(content) {
+					sr.Errors = append(sr.Errors, fmt.Sprintf("%s: skipped (JS-heavy SPA, needs browser rendering)", file.Path))
+					continue
+				}
 				md, convErr := fetcher.ConvertHTML(content)
 				if convErr != nil || len(md) < 50 {
 					sr.Errors = append(sr.Errors, fmt.Sprintf("%s: rejected (HTML, conversion failed)", file.Path))
@@ -126,12 +178,24 @@ func (m *Mirror) Sync(ctx context.Context, result *discovery.Result, filter Filt
 		}
 		content = RewriteLinks(content, result.BaseURL)
 
-		_, writeErr := m.Store.WriteContent(result.Domain, file.Path, []byte(content))
+		// Compare with existing content to classify as Added/Updated/Unchanged
+		newBytes := []byte(content)
+		existing, readErr := m.Store.ReadContent(result.Domain, file.Path)
+		if readErr == nil && bytes.Equal(existing, newBytes) {
+			sr.Unchanged = append(sr.Unchanged, file.Path)
+			continue
+		}
+
+		_, writeErr := m.Store.WriteContent(result.Domain, file.Path, newBytes)
 		if writeErr != nil {
 			sr.Errors = append(sr.Errors, fmt.Sprintf("%s: %v", file.Path, writeErr))
 			continue
 		}
-		sr.Added = append(sr.Added, file.Path)
+		if readErr == nil {
+			sr.Updated = append(sr.Updated, file.Path)
+		} else {
+			sr.Added = append(sr.Added, file.Path)
+		}
 	}
 
 	if err := m.Store.WriteMeta(result.Domain, "discovered.json", result); err != nil {

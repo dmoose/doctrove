@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/dmoose/doctrove/internal/engine"
+	"github.com/dmoose/doctrove/engine"
 	gomcp "github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -21,9 +21,9 @@ func discoverTool() gomcp.Tool {
 	)
 }
 
-func discoverHandler(e *engine.Engine) server_handler {
+func discoverHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		url := stringArg(req, "url", "")
+		url := StringArg(req, "url", "")
 		if url == "" {
 			return gomcp.NewToolResultError("url is required"), nil
 		}
@@ -33,7 +33,7 @@ func discoverHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(result)
+		return JsonResult(result)
 	}
 }
 
@@ -52,14 +52,14 @@ func scanTool() gomcp.Tool {
 	)
 }
 
-func scanHandler(e *engine.Engine) server_handler {
+func scanHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		url := stringArg(req, "url", "")
+		url := StringArg(req, "url", "")
 		if url == "" {
 			return gomcp.NewToolResultError("url is required"), nil
 		}
 
-		contentTypes := stringArg(req, "content_types", "")
+		contentTypes := StringArg(req, "content_types", "")
 
 		info, err := e.Init(ctx, url)
 		if err != nil {
@@ -76,9 +76,10 @@ func scanHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(fmt.Sprintf("sync: %v", err)), nil
 		}
 
-		return jsonResult(map[string]any{
+		return JsonResult(map[string]any{
 			"domain":    syncResult.Domain,
 			"added":     len(syncResult.Added),
+			"updated":   len(syncResult.Updated),
 			"unchanged": len(syncResult.Unchanged),
 			"skipped":   len(syncResult.Skipped),
 			"errors":    syncResult.Errors,
@@ -106,6 +107,9 @@ func searchTool() gomcp.Tool {
 		gomcp.WithString("category",
 			gomcp.Description("Filter by page category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, index, other"),
 		),
+		gomcp.WithString("path",
+			gomcp.Description("Filter to paths containing this substring (e.g. '/specification/' or '/api/')"),
+		),
 		gomcp.WithNumber("limit",
 			gomcp.Description("Max number of results (default 20)"),
 		),
@@ -115,25 +119,26 @@ func searchTool() gomcp.Tool {
 	)
 }
 
-func searchHandler(e *engine.Engine) server_handler {
+func searchHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		query := stringArg(req, "query", "")
+		query := StringArg(req, "query", "")
 		if query == "" {
 			return gomcp.NewToolResultError("query is required"), nil
 		}
 
 		hits, err := e.Search(ctx, query,
-			stringArg(req, "site", ""),
-			stringArg(req, "content_type", ""),
-			stringArg(req, "category", ""),
-			intArg(req, "limit", 20),
-			intArg(req, "offset", 0),
+			StringArg(req, "site", ""),
+			StringArg(req, "content_type", ""),
+			StringArg(req, "category", ""),
+			StringArg(req, "path", ""),
+			IntArg(req, "limit", 20),
+			IntArg(req, "offset", 0),
 		)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(hits)
+		return JsonResult(hits)
 	}
 }
 
@@ -158,23 +163,23 @@ func searchFullTool() gomcp.Tool {
 	)
 }
 
-func searchFullHandler(e *engine.Engine) server_handler {
+func searchFullHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		query := stringArg(req, "query", "")
+		query := StringArg(req, "query", "")
 		if query == "" {
 			return gomcp.NewToolResultError("query is required"), nil
 		}
 
 		result, err := e.SearchFull(ctx, query,
-			stringArg(req, "site", ""),
-			stringArg(req, "content_type", ""),
-			stringArg(req, "category", ""),
+			StringArg(req, "site", ""),
+			StringArg(req, "content_type", ""),
+			StringArg(req, "category", ""),
 		)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(result)
+		return JsonResult(result)
 	}
 }
 
@@ -186,13 +191,13 @@ func listTool() gomcp.Tool {
 	)
 }
 
-func listHandler(e *engine.Engine) server_handler {
+func listHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
 		sites, err := e.List(ctx)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(sites)
+		return JsonResult(sites)
 	}
 }
 
@@ -218,16 +223,16 @@ func readTool() gomcp.Tool {
 	)
 }
 
-func readHandler(e *engine.Engine) server_handler {
+func readHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
-		path := stringArg(req, "path", "")
+		site := StringArg(req, "site", "")
+		path := StringArg(req, "path", "")
 		if site == "" || path == "" {
 			return gomcp.NewToolResultError("site and path are required"), nil
 		}
 
-		section := stringArg(req, "section", "")
-		maxLines := intArg(req, "max_lines", 0)
+		section := StringArg(req, "section", "")
+		maxLines := IntArg(req, "max_lines", 0)
 
 		content, err := e.ReadSection(ctx, site, path, section, maxLines)
 		if err != nil {
@@ -255,7 +260,7 @@ func readHandler(e *engine.Engine) server_handler {
 			result["section"] = section
 		}
 
-		return jsonResult(result)
+		return JsonResult(result)
 	}
 }
 
@@ -271,9 +276,9 @@ func statusTool() gomcp.Tool {
 	)
 }
 
-func statusHandler(e *engine.Engine) server_handler {
+func statusHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
+		site := StringArg(req, "site", "")
 		if site == "" {
 			return gomcp.NewToolResultError("site is required"), nil
 		}
@@ -283,7 +288,7 @@ func statusHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(info)
+		return JsonResult(info)
 	}
 }
 
@@ -303,10 +308,10 @@ func diffTool() gomcp.Tool {
 
 const maxDiffBytes = 50_000
 
-func diffHandler(e *engine.Engine) server_handler {
+func diffHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		from := stringArg(req, "from", "")
-		to := stringArg(req, "to", "HEAD")
+		from := StringArg(req, "from", "")
+		to := StringArg(req, "to", "HEAD")
 
 		diff, err := e.Diff(ctx, from, to)
 		if err != nil {
@@ -341,17 +346,17 @@ func historyTool() gomcp.Tool {
 	)
 }
 
-func historyHandler(e *engine.Engine) server_handler {
+func historyHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
-		limit := intArg(req, "limit", 20)
+		site := StringArg(req, "site", "")
+		limit := IntArg(req, "limit", 20)
 
 		entries, err := e.History(ctx, site, limit)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(entries)
+		return JsonResult(entries)
 	}
 }
 
@@ -364,6 +369,9 @@ func listFilesTool() gomcp.Tool {
 			gomcp.Required(),
 			gomcp.Description("The domain (e.g. stripe.com)"),
 		),
+		gomcp.WithString("category",
+			gomcp.Description("Filter to a specific category (e.g. api-reference, tutorial, guide, spec)"),
+		),
 		gomcp.WithNumber("limit",
 			gomcp.Description("Max files to return (default 100, 0 = all)"),
 		),
@@ -373,9 +381,9 @@ func listFilesTool() gomcp.Tool {
 	)
 }
 
-func listFilesHandler(e *engine.Engine) server_handler {
+func listFilesHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
+		site := StringArg(req, "site", "")
 		if site == "" {
 			return gomcp.NewToolResultError("site is required"), nil
 		}
@@ -385,8 +393,20 @@ func listFilesHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		offset := intArg(req, "offset", 0)
-		limit := intArg(req, "limit", 100)
+		// Filter by category if specified
+		catFilter := StringArg(req, "category", "")
+		if catFilter != "" {
+			var filtered []engine.FileEntry
+			for _, f := range files {
+				if f.Category == catFilter {
+					filtered = append(filtered, f)
+				}
+			}
+			files = filtered
+		}
+
+		offset := IntArg(req, "offset", 0)
+		limit := IntArg(req, "limit", 100)
 
 		if offset > 0 {
 			if offset >= len(files) {
@@ -399,7 +419,7 @@ func listFilesHandler(e *engine.Engine) server_handler {
 			files = files[:limit]
 		}
 
-		return jsonResult(files)
+		return JsonResult(files)
 	}
 }
 
@@ -418,19 +438,19 @@ func removeTool() gomcp.Tool {
 	)
 }
 
-func removeHandler(e *engine.Engine) server_handler {
+func removeHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
+		site := StringArg(req, "site", "")
 		if site == "" {
 			return gomcp.NewToolResultError("site is required"), nil
 		}
 
-		keepFiles := boolArg(req, "keep_files", false)
+		keepFiles := BoolArg(req, "keep_files", false)
 		if err := e.Remove(ctx, site, keepFiles); err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(map[string]string{"removed": site})
+		return JsonResult(map[string]string{"removed": site})
 	}
 }
 
@@ -442,13 +462,13 @@ func catalogTool() gomcp.Tool {
 	)
 }
 
-func catalogHandler(e *engine.Engine) server_handler {
+func catalogHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
 		entries, err := e.Catalog(ctx)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(entries)
+		return JsonResult(entries)
 	}
 }
 
@@ -460,13 +480,13 @@ func statsTool() gomcp.Tool {
 	)
 }
 
-func statsHandler(e *engine.Engine) server_handler {
+func statsHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
 		stats, err := e.Stats(ctx)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
-		return jsonResult(stats)
+		return JsonResult(stats)
 	}
 }
 
@@ -490,11 +510,11 @@ func tagTool() gomcp.Tool {
 	)
 }
 
-func tagHandler(e *engine.Engine) server_handler {
+func tagHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
-		path := stringArg(req, "path", "")
-		category := stringArg(req, "category", "")
+		site := StringArg(req, "site", "")
+		path := StringArg(req, "path", "")
+		category := StringArg(req, "category", "")
 		if site == "" || path == "" || category == "" {
 			return gomcp.NewToolResultError("site, path, and category are required"), nil
 		}
@@ -503,7 +523,7 @@ func tagHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(map[string]string{
+		return JsonResult(map[string]string{
 			"site":     site,
 			"path":     path,
 			"category": category,
@@ -524,9 +544,9 @@ func checkTool() gomcp.Tool {
 	)
 }
 
-func checkHandler(e *engine.Engine) server_handler {
+func checkHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
+		site := StringArg(req, "site", "")
 		if site == "" {
 			return gomcp.NewToolResultError("site is required"), nil
 		}
@@ -536,7 +556,7 @@ func checkHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(result)
+		return JsonResult(result)
 	}
 }
 
@@ -552,9 +572,9 @@ func refreshTool() gomcp.Tool {
 	)
 }
 
-func refreshHandler(e *engine.Engine) server_handler {
+func refreshHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
+		site := StringArg(req, "site", "")
 		if site == "" {
 			return gomcp.NewToolResultError("site is required"), nil
 		}
@@ -564,9 +584,10 @@ func refreshHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(map[string]any{
+		return JsonResult(map[string]any{
 			"domain":    result.Domain,
 			"added":     len(result.Added),
+			"updated":   len(result.Updated),
 			"unchanged": len(result.Unchanged),
 			"skipped":   len(result.Skipped),
 			"errors":    result.Errors,
@@ -597,22 +618,22 @@ func outlineTool() gomcp.Tool {
 	)
 }
 
-func outlineHandler(e *engine.Engine) server_handler {
+func outlineHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
-		path := stringArg(req, "path", "")
+		site := StringArg(req, "site", "")
+		path := StringArg(req, "path", "")
 		if site == "" || path == "" {
 			return gomcp.NewToolResultError("site and path are required"), nil
 		}
-		maxDepth := intArg(req, "max_depth", 3)
-		maxSections := intArg(req, "max_sections", 100)
+		maxDepth := IntArg(req, "max_depth", 3)
+		maxSections := IntArg(req, "max_sections", 100)
 
 		result, err := e.Outline(ctx, site, path, maxDepth, maxSections)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(result)
+		return JsonResult(result)
 	}
 }
 
@@ -636,11 +657,11 @@ func summarizeTool() gomcp.Tool {
 	)
 }
 
-func summarizeHandler(e *engine.Engine) server_handler {
+func summarizeHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-		site := stringArg(req, "site", "")
-		path := stringArg(req, "path", "")
-		summary := stringArg(req, "summary", "")
+		site := StringArg(req, "site", "")
+		path := StringArg(req, "path", "")
+		summary := StringArg(req, "summary", "")
 		if site == "" || path == "" || summary == "" {
 			return gomcp.NewToolResultError("site, path, and summary are required"), nil
 		}
@@ -649,7 +670,7 @@ func summarizeHandler(e *engine.Engine) server_handler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return jsonResult(map[string]string{
+		return JsonResult(map[string]string{
 			"site":   site,
 			"path":   path,
 			"status": "summary saved",
@@ -659,9 +680,9 @@ func summarizeHandler(e *engine.Engine) server_handler {
 
 // --- helpers ---
 
-type server_handler = func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error)
+type ToolHandler = func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error)
 
-func jsonResult(v any) (*gomcp.CallToolResult, error) {
+func JsonResult(v any) (*gomcp.CallToolResult, error) {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return gomcp.NewToolResultError(fmt.Sprintf("marshaling result: %v", err)), nil

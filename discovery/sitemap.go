@@ -5,7 +5,7 @@ import (
 	"encoding/xml"
 	"strings"
 
-	"github.com/dmoose/doctrove/internal/fetcher"
+	"github.com/dmoose/doctrove/fetcher"
 )
 
 type sitemapIndex struct {

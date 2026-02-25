@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/dmoose/doctrove/internal/engine"
+	"github.com/dmoose/doctrove/engine"
 	"github.com/spf13/cobra"
 )
 

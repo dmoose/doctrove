@@ -96,14 +96,14 @@ Example config:
 | `trove_scan` | Add and sync a site (`content_types` param to filter; persisted for refresh) |
 | `trove_refresh` | Re-sync a tracked site, using ETag caching (honours content_types filter) |
 | `trove_check` | Dry-run: show available content without downloading |
-| `trove_search` | Full-text search with `category` filter; results include summaries when available |
+| `trove_search` | Full-text search with `category`, `path` filters; path-boosted ranking; summaries included |
 | `trove_search_full` | Search and return full content of best match (large — prefer outline+section read) |
 | `trove_outline` | Get heading structure with `max_depth` (default 3) and `max_sections` (default 100) caps |
 | `trove_read` | Read a file or specific section by heading match (`section` param) |
 | `trove_summarize` | Store an agent-written summary for a file (visible in search results and outlines) |
 | `trove_tag` | Override category for a file (persists across re-syncs) |
 | `trove_list` | List tracked sites |
-| `trove_list_files` | Enumerate files with path, size, content type, and category (paginated) |
+| `trove_list_files` | Enumerate files with path, size, content type, and category (paginated, `category` filter) |
 | `trove_catalog` | Site summaries with topics |
 | `trove_stats` | Workspace statistics |
 | `trove_status` | Sync status, category breakdown, and staleness for a site |

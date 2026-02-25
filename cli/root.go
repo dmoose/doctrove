@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/dmoose/doctrove/internal/engine"
+	"github.com/dmoose/doctrove/engine"
 	"github.com/spf13/cobra"
 )
 
@@ -54,9 +54,11 @@ func newEngine() (*engine.Engine, error) {
 	if err := os.MkdirAll(rootDir, 0755); err != nil {
 		return nil, fmt.Errorf("creating workspace dir: %w", err)
 	}
-	e, err := engine.New(rootDir, engine.Options{
-		RespectRobots: respectRobots,
-	})
+	var opts []engine.Option
+	if respectRobots {
+		opts = append(opts, engine.WithRespectRobots())
+	}
+	e, err := engine.New(rootDir, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("initializing: %w", err)
 	}

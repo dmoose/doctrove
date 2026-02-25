@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dmoose/doctrove/internal/fetcher"
+	"github.com/dmoose/doctrove/fetcher"
 	"github.com/dmoose/doctrove/internal/robots"
 )
 
@@ -38,6 +38,7 @@ type Result struct {
 	Domain       string           `json:"domain"`
 	BaseURL      string           `json:"base_url"`
 	Files        []DiscoveredFile `json:"files"`
+	Platform     *Platform        `json:"platform,omitempty"` // detected doc platform/theme
 	DiscoveredAt time.Time        `json:"discovered_at"`
 }
 
@@ -60,7 +61,7 @@ type Discoverer struct {
 }
 
 // New creates a Discoverer with a SiteProvider as the default.
-func New(f *fetcher.Fetcher, robotsChecker *robots.Checker, maxProbes int) *Discoverer {
+func New(f fetcher.HTTPFetcher, robotsChecker *robots.Checker, maxProbes int) *Discoverer {
 	return &Discoverer{
 		providers: []Provider{
 			NewSiteProvider(f, robotsChecker, maxProbes),
@@ -95,13 +96,13 @@ func (d *Discoverer) Discover(ctx context.Context, input string) (*Result, error
 
 // SiteProvider probes websites for LLM-targeted content at well-known paths.
 type SiteProvider struct {
-	Fetcher   *fetcher.Fetcher
+	Fetcher   fetcher.HTTPFetcher
 	Robots    *robots.Checker
 	MaxProbes int
 }
 
 // NewSiteProvider creates a SiteProvider.
-func NewSiteProvider(f *fetcher.Fetcher, robotsChecker *robots.Checker, maxProbes int) *SiteProvider {
+func NewSiteProvider(f fetcher.HTTPFetcher, robotsChecker *robots.Checker, maxProbes int) *SiteProvider {
 	if maxProbes <= 0 {
 		maxProbes = 100
 	}
@@ -150,7 +151,83 @@ func (p *SiteProvider) Discover(ctx context.Context, baseURL string) (*Result, e
 	sitemapFiles := p.probeSitemap(ctx, baseURL, seen)
 	result.Files = append(result.Files, sitemapFiles...)
 
+	// Phase 4: if no llms.txt or companions found, probe common doc seed paths.
+	// Also detect the doc platform from the index page for better HTML cleaning.
+	if len(result.Files) == 0 {
+		seedFiles := p.probeSeedPaths(ctx, baseURL, seen)
+		result.Files = append(result.Files, seedFiles...)
+	}
+
+	// Platform detection: fetch index page and identify the doc framework.
+	// This runs on first discovery to inform HTML cleaning selectors.
+	if platform := p.detectPlatform(ctx, baseURL); platform != nil {
+		result.Platform = platform
+	}
+
 	return result, nil
+}
+
+// seedPaths are common documentation entry points tried when no llms.txt is found.
+var seedPaths = []string{
+	"/docs",
+	"/docs/",
+	"/getting-started",
+	"/introduction",
+	"/overview",
+	"/guide",
+	"/quickstart",
+}
+
+// probeSeedPaths probes common documentation paths when a site has no llms.txt.
+func (p *SiteProvider) probeSeedPaths(ctx context.Context, baseURL string, seen map[string]bool) []DiscoveredFile {
+	baseURL = strings.TrimRight(baseURL, "/")
+	var found []DiscoveredFile
+
+	for _, seed := range seedPaths {
+		if seen[seed] {
+			continue
+		}
+		url := baseURL + seed
+		if p.Robots != nil && !p.Robots.IsAllowed(ctx, url) {
+			continue
+		}
+		resp, err := p.Fetcher.Fetch(ctx, url)
+		if err != nil || resp == nil {
+			continue
+		}
+		if fetcher.IsHTML(resp.ContentType, resp.Body) {
+			if fetcher.IsJSHeavy(string(resp.Body)) {
+				continue // skip JS-only shells
+			}
+			md, convErr := fetcher.ConvertHTML(string(resp.Body))
+			if convErr != nil || len(strings.TrimSpace(md)) < 50 {
+				continue
+			}
+			found = append(found, DiscoveredFile{
+				URL:         url,
+				Path:        seed,
+				ContentType: TypeCompanion,
+				Size:        len(md),
+				FoundVia:    "seed-probe (html-to-md)",
+				Body:        []byte(md),
+			})
+			seen[seed] = true
+		}
+	}
+	return found
+}
+
+// detectPlatform fetches the site index and identifies the documentation platform.
+func (p *SiteProvider) detectPlatform(ctx context.Context, baseURL string) *Platform {
+	resp, err := p.Fetcher.Fetch(ctx, strings.TrimRight(baseURL, "/")+"/")
+	if err != nil || resp == nil {
+		return nil
+	}
+	if !fetcher.IsHTML(resp.ContentType, resp.Body) {
+		return nil
+	}
+	platform := DetectPlatform(string(resp.Body))
+	return &platform
 }
 
 func domainFromURL(rawURL string) string {

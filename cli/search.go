@@ -56,7 +56,7 @@ var searchCmd = &cobra.Command{
 			return nil
 		}
 
-		sr, err := e.Search(cmd.Context(), query, searchSite, searchContentType, searchCategory, searchLimit, 0)
+		sr, err := e.Search(cmd.Context(), query, searchSite, searchContentType, searchCategory, "", searchLimit, 0)
 		if err != nil {
 			return err
 		}

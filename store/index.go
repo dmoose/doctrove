@@ -139,11 +139,15 @@ type SearchOpts struct {
 	Site        string // filter to a specific domain
 	ContentType string // filter to a content type
 	Category    string // filter to a category (e.g. "api-reference")
+	Path        string // filter to paths containing this substring
 	Limit       int
 	Offset      int
 }
 
 // Search performs a full-text search across all indexed content.
+// Path matches in the query are boosted: if a query term appears in the file
+// path, that result ranks higher. This helps agents find e.g. "getting-started"
+// docs when searching for "getting started".
 func (idx *Index) Search(query string, opts SearchOpts) ([]SearchHit, error) {
 	if opts.Limit <= 0 {
 		opts.Limit = 20
@@ -167,24 +171,48 @@ func (idx *Index) Search(query string, opts SearchOpts) ([]SearchHit, error) {
 		conditions = append(conditions, "m.category = ?")
 		args = append(args, opts.Category)
 	}
+	if opts.Path != "" {
+		conditions = append(conditions, "content.path LIKE ?")
+		args = append(args, "%"+opts.Path+"%")
+	}
 
 	where := strings.Join(conditions, " AND ")
-	args = append(args, opts.Limit, opts.Offset)
+
+	// Build a path-boost expression: for each query word, if it appears in the
+	// path (case-insensitive), subtract 5.0 from rank (FTS5 rank is negative,
+	// more negative = better). This ensures path matches surface first.
+	words := queryWords(query)
+	pathBoost := ""
+	var boostArgs []any
+	if len(words) > 0 {
+		var parts []string
+		for _, w := range words {
+			parts = append(parts, "CASE WHEN LOWER(content.path) LIKE ? THEN -5.0 ELSE 0.0 END")
+			boostArgs = append(boostArgs, "%"+strings.ToLower(w)+"%")
+		}
+		pathBoost = " + " + strings.Join(parts, " + ")
+	}
+
+	// Combine all args: boost args first (in SELECT), then filter args, then LIMIT/OFFSET
+	allArgs := make([]any, 0, len(boostArgs)+len(args)+2)
+	allArgs = append(allArgs, boostArgs...)
+	allArgs = append(allArgs, args...)
+	allArgs = append(allArgs, opts.Limit, opts.Offset)
 
 	q := fmt.Sprintf(`
 		SELECT content.domain, content.path, content.content_type,
 			COALESCE(m.category, ''),
 			snippet(content, 3, '**', '**', '...', 40),
 			COALESCE(m.summary, ''),
-			content.rank
+			content.rank%s AS boosted_rank
 		FROM content
 		LEFT JOIN content_meta m ON content.domain = m.domain AND content.path = m.path
 		WHERE %s
-		ORDER BY content.rank
+		ORDER BY boosted_rank
 		LIMIT ? OFFSET ?
-	`, where)
+	`, pathBoost, where)
 
-	rows, err := idx.db.Query(q, args...)
+	rows, err := idx.db.Query(q, allArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("searching: %w", err)
 	}
@@ -199,6 +227,25 @@ func (idx *Index) Search(query string, opts SearchOpts) ([]SearchHit, error) {
 		hits = append(hits, h)
 	}
 	return hits, rows.Err()
+}
+
+// queryWords splits a search query into individual words for path boosting,
+// stripping FTS5 operators.
+func queryWords(query string) []string {
+	var words []string
+	for _, w := range strings.Fields(query) {
+		// Skip FTS5 operators
+		upper := strings.ToUpper(w)
+		if upper == "AND" || upper == "OR" || upper == "NOT" || upper == "NEAR" {
+			continue
+		}
+		// Strip quotes and prefix operators
+		w = strings.Trim(w, `"'*^`)
+		if w != "" {
+			words = append(words, w)
+		}
+	}
+	return words
 }
 
 // Rebuild drops and recreates the FTS index from files on disk.

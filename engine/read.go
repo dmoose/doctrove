@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dmoose/doctrove/internal/content"
+	"github.com/dmoose/doctrove/content"
 )
 
 // OutlineResult is the table of contents for a file.

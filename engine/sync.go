@@ -6,15 +6,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dmoose/doctrove/internal/discovery"
-	"github.com/dmoose/doctrove/internal/events"
+	"github.com/dmoose/doctrove/discovery"
 	"github.com/dmoose/doctrove/internal/lockfile"
-	"github.com/dmoose/doctrove/internal/mirror"
+	"github.com/dmoose/doctrove/mirror"
 )
 
 // Sync downloads/updates content for a site.
 func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
-	start := time.Now()
 	lock, err := lockfile.Acquire(e.RootDir)
 	if err != nil {
 		return nil, err
@@ -66,24 +64,6 @@ func (e *Engine) Sync(ctx context.Context, domain string) (*SyncResult, error) {
 		SyncTime:   now,
 		Committed:  committed,
 	}
-	syncLevel := "info"
-	if len(mr.Errors) > 0 {
-		syncLevel = "warn"
-	}
-	e.Events.EmitFull(events.Event{
-		Channel:    "sync",
-		Action:     "sync",
-		Level:      syncLevel,
-		DurationMS: time.Since(start).Milliseconds(),
-		Data: map[string]any{
-			"domain":    domain,
-			"added":     len(mr.Added),
-			"unchanged": len(mr.Unchanged),
-			"skipped":   len(mr.Skipped),
-			"errors":    len(mr.Errors),
-			"provider":  e.providerFor(siteCfg.URL),
-		},
-	})
 	return sr, nil
 }
 
@@ -116,7 +96,6 @@ func (e *Engine) SyncWithContentTypes(ctx context.Context, domain, contentTypes 
 		return e.Sync(ctx, domain)
 	}
 
-	start := time.Now()
 	lock, err := lockfile.Acquire(e.RootDir)
 	if err != nil {
 		return nil, err
@@ -179,25 +158,6 @@ func (e *Engine) SyncWithContentTypes(ctx context.Context, domain, contentTypes 
 		SyncTime:   now,
 		Committed:  committed,
 	}
-	syncLevel := "info"
-	if len(mr.Errors) > 0 {
-		syncLevel = "warn"
-	}
-	e.Events.EmitFull(events.Event{
-		Channel:    "sync",
-		Action:     "sync",
-		Level:      syncLevel,
-		DurationMS: time.Since(start).Milliseconds(),
-		Data: map[string]any{
-			"domain":        domain,
-			"added":         len(mr.Added),
-			"unchanged":     len(mr.Unchanged),
-			"skipped":       len(mr.Skipped),
-			"errors":        len(mr.Errors),
-			"content_types": contentTypes,
-			"provider":      e.providerFor(siteCfg.URL),
-		},
-	})
 	return sr, nil
 }
 

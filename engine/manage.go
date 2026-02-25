@@ -7,11 +7,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dmoose/doctrove/internal/discovery"
-	"github.com/dmoose/doctrove/internal/events"
+	"github.com/dmoose/doctrove/discovery"
 	"github.com/dmoose/doctrove/internal/lockfile"
-	"github.com/dmoose/doctrove/internal/mirror"
-	"github.com/dmoose/doctrove/internal/store"
+	"github.com/dmoose/doctrove/mirror"
+	"github.com/dmoose/doctrove/store"
 )
 
 // SiteInfo is returned when listing or describing a site.
@@ -83,45 +82,12 @@ func (e *Engine) Init(ctx context.Context, rawURL string) (*SiteInfo, error) {
 		URL:       rawURL,
 		FileCount: len(result.Files),
 	}
-	e.Events.EmitFull(events.Event{
-		Channel: "sync",
-		Action:  "init",
-		Level:   "info",
-		Data: map[string]any{
-			"domain":      info.Domain,
-			"files_found": info.FileCount,
-			"provider":    e.providerFor(rawURL),
-		},
-	})
 	return info, nil
 }
 
 // Discover probes a URL for LLM content without tracking it.
 func (e *Engine) Discover(ctx context.Context, rawURL string) (*discovery.Result, error) {
-	result, err := e.Discovery.Discover(ctx, rawURL)
-	if err == nil && result != nil {
-		e.Events.EmitFull(events.Event{
-			Channel: "sync",
-			Action:  "discover",
-			Level:   "info",
-			Data: map[string]any{
-				"domain":      result.Domain,
-				"files_found": len(result.Files),
-				"provider":    e.providerFor(rawURL),
-			},
-		})
-	}
-	return result, err
-}
-
-// providerFor returns the name of the provider that would handle this input.
-func (e *Engine) providerFor(input string) string {
-	for _, p := range e.Discovery.Providers() {
-		if p.CanHandle(input) {
-			return p.Name()
-		}
-	}
-	return "none"
+	return e.Discovery.Discover(ctx, rawURL)
 }
 
 // Status returns info about a tracked site including category breakdown and age.
@@ -276,12 +242,6 @@ func (e *Engine) Remove(ctx context.Context, domain string, keepFiles bool) erro
 	commitMsg := fmt.Sprintf("remove %s", domain)
 	_, _ = e.Git.Commit(commitMsg)
 
-	e.Events.EmitFull(events.Event{
-		Channel: "sync",
-		Action:  "remove",
-		Level:   "info",
-		Data:    map[string]any{"domain": domain, "keep_files": keepFiles},
-	})
 	return nil
 }
 

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dmoose/doctrove/internal/engine"
-	"github.com/dmoose/doctrove/internal/events"
+	"github.com/dmoose/doctrove/engine"
+	"github.com/dmoose/doctrove/events"
 	gomcp "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -51,8 +51,8 @@ func Serve(e *engine.Engine) error {
 }
 
 func registerTools(s *server.MCPServer, e *engine.Engine, sessionID string) {
-	add := func(tool gomcp.Tool, handler server_handler) {
-		s.AddTool(tool, traced(e, tool.Name, sessionID, handler))
+	add := func(tool gomcp.Tool, handler ToolHandler) {
+		s.AddTool(tool, Traced(e, tool.Name, sessionID, handler))
 	}
 	add(discoverTool(), discoverHandler(e))
 	add(scanTool(), scanHandler(e))
@@ -74,13 +74,14 @@ func registerTools(s *server.MCPServer, e *engine.Engine, sessionID string) {
 	add(summarizeTool(), summarizeHandler(e))
 }
 
-// traced wraps a tool handler to emit events to the relay.
+// Traced wraps a tool handler to emit events to the relay.
 // sessionID is the default agent identity (cwd:pid); an explicit agent_id
-// argument in the tool call overrides it.
-func traced(e *engine.Engine, toolName, sessionID string, handler server_handler) server_handler {
+// argument in the tool call overrides it. Exported so protrove can reuse
+// the same tracing pattern for premium tools.
+func Traced(e *engine.Engine, toolName, sessionID string, handler ToolHandler) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
 		start := time.Now()
-		agentID := stringArg(req, "agent_id", sessionID)
+		agentID := StringArg(req, "agent_id", sessionID)
 
 		result, err := handler(ctx, req)
 
@@ -101,8 +102,8 @@ func traced(e *engine.Engine, toolName, sessionID string, handler server_handler
 	}
 }
 
-// helper to pull a bool arg with a default
-func boolArg(req gomcp.CallToolRequest, key string, def bool) bool {
+// BoolArg pulls a bool argument from a tool request with a default.
+func BoolArg(req gomcp.CallToolRequest, key string, def bool) bool {
 	v, ok := req.GetArguments()[key]
 	if !ok {
 		return def
@@ -114,8 +115,8 @@ func boolArg(req gomcp.CallToolRequest, key string, def bool) bool {
 	return b
 }
 
-// helper to pull a string arg with a default
-func stringArg(req gomcp.CallToolRequest, key, def string) string {
+// StringArg pulls a string argument from a tool request with a default.
+func StringArg(req gomcp.CallToolRequest, key, def string) string {
 	v, ok := req.GetArguments()[key]
 	if !ok {
 		return def
@@ -127,8 +128,8 @@ func stringArg(req gomcp.CallToolRequest, key, def string) string {
 	return s
 }
 
-// helper to pull an int arg with a default
-func intArg(req gomcp.CallToolRequest, key string, def int) int {
+// IntArg pulls an int argument from a tool request with a default.
+func IntArg(req gomcp.CallToolRequest, key string, def int) int {
 	v, ok := req.GetArguments()[key]
 	if !ok {
 		return def

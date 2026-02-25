@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/dmoose/doctrove/internal/discovery"
-	"github.com/dmoose/doctrove/internal/fetcher"
-	"github.com/dmoose/doctrove/internal/store"
+	"github.com/dmoose/doctrove/discovery"
+	"github.com/dmoose/doctrove/fetcher"
+	"github.com/dmoose/doctrove/store"
 )
 
 // stubIndexer satisfies store.Indexer for mirror tests without touching SQLite.
