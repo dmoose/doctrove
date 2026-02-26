@@ -1,6 +1,8 @@
 # doctrove
 
-A central store for LLM-targeted documentation. Discovers, mirrors, and indexes content from sites that publish `llms.txt`, companion `.html.md` files, and related formats. Designed for developers who want local, searchable access to LLM-friendly docs — and for AI agents that need to find and read them.
+A local documentation store for AI coding agents.
+
+Many websites now publish LLM-friendly documentation via [`llms.txt`](https://llmstxt.org/) — a proposed standard (like `robots.txt` for crawlers) where sites provide markdown summaries, companion files, and structured content specifically for language models. doctrove discovers, mirrors, and indexes this content so agents have fast, searchable, offline access to documentation — without burning tokens on web fetches or context windows on full pages.
 
 ## Install
 
