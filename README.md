@@ -88,7 +88,7 @@ Example config:
 }
 ```
 
-### Tools (18)
+### Tools (20)
 
 | Tool | Description |
 |---|---|
@@ -109,6 +109,8 @@ Example config:
 | `trove_status` | Sync status, category breakdown, and staleness for a site |
 | `trove_history` | Git change history |
 | `trove_diff` | Content changes between refs |
+| `trove_stale` | List sites not synced within a threshold (default 7d) |
+| `trove_find` | Find files by path pattern (faster than search for path lookups) |
 | `trove_remove` | Stop tracking a site |
 
 ### Context-Efficient Workflow

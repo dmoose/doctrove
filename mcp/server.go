@@ -72,6 +72,8 @@ func registerTools(s *server.MCPServer, e *engine.Engine, sessionID string) {
 	add(checkTool(), checkHandler(e))
 	add(outlineTool(), outlineHandler(e))
 	add(summarizeTool(), summarizeHandler(e))
+	add(staleTool(), staleHandler(e))
+	add(findTool(), findHandler(e))
 }
 
 // Traced wraps a tool handler to emit events to the relay.

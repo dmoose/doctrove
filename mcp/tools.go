@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/dmoose/doctrove/engine"
 	gomcp "github.com/mark3labs/mcp-go/mcp"
@@ -76,16 +78,20 @@ func scanHandler(e *engine.Engine) ToolHandler {
 			return gomcp.NewToolResultError(fmt.Sprintf("sync: %v", err)), nil
 		}
 
-		return JsonResult(map[string]any{
+		result := map[string]any{
 			"domain":    syncResult.Domain,
 			"added":     len(syncResult.Added),
 			"updated":   len(syncResult.Updated),
 			"unchanged": len(syncResult.Unchanged),
 			"skipped":   len(syncResult.Skipped),
-			"errors":    syncResult.Errors,
 			"sync_time": syncResult.SyncTime,
 			"committed": syncResult.Committed,
-		})
+		}
+		if len(syncResult.Errors) > 0 {
+			result["warnings"] = len(syncResult.Errors)
+			result["warning_details"] = syncResult.Errors
+		}
+		return JsonResult(result)
 	}
 }
 
@@ -318,6 +324,9 @@ func diffHandler(e *engine.Engine) ToolHandler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
+		// Filter out internal metadata files — agents care about content changes
+		diff = filterDiffToContent(diff)
+
 		if diff == "" {
 			return gomcp.NewToolResultText("No changes."), nil
 		}
@@ -330,6 +339,27 @@ func diffHandler(e *engine.Engine) ToolHandler {
 		}
 		return gomcp.NewToolResultText(diff), nil
 	}
+}
+
+// filterDiffToContent strips diff hunks for internal files (lock, config, metadata).
+func filterDiffToContent(diff string) string {
+	// Split into file-level hunks (each starts with "diff --git")
+	parts := strings.Split(diff, "diff --git")
+	var kept []string
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		// Skip internal metadata files
+		if strings.Contains(part, "/.doctrove.lock") ||
+			strings.Contains(part, "/_meta/") ||
+			strings.Contains(part, "doctrove.yaml") ||
+			strings.Contains(part, "doctrove.db") {
+			continue
+		}
+		kept = append(kept, "diff --git"+part)
+	}
+	return strings.Join(kept, "")
 }
 
 // --- trove_history ---
@@ -584,15 +614,19 @@ func refreshHandler(e *engine.Engine) ToolHandler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		return JsonResult(map[string]any{
+		resp := map[string]any{
 			"domain":    result.Domain,
 			"added":     len(result.Added),
 			"updated":   len(result.Updated),
 			"unchanged": len(result.Unchanged),
 			"skipped":   len(result.Skipped),
-			"errors":    result.Errors,
 			"sync_time": result.SyncTime,
-		})
+		}
+		if len(result.Errors) > 0 {
+			resp["warnings"] = len(result.Errors)
+			resp["warning_details"] = result.Errors
+		}
+		return JsonResult(resp)
 	}
 }
 
@@ -674,6 +708,97 @@ func summarizeHandler(e *engine.Engine) ToolHandler {
 			"site":   site,
 			"path":   path,
 			"status": "summary saved",
+		})
+	}
+}
+
+// --- trove_stale ---
+
+func staleTool() gomcp.Tool {
+	return gomcp.NewTool("trove_stale",
+		gomcp.WithDescription("List sites not synced within a threshold (default 7 days). Use this to find sites that may have outdated content and need a refresh."),
+		gomcp.WithString("threshold",
+			gomcp.Description("Duration threshold (e.g. '7d', '24h', '3d'). Default: 7d"),
+		),
+	)
+}
+
+func staleHandler(e *engine.Engine) ToolHandler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		threshStr := StringArg(req, "threshold", "7d")
+		threshold, err := parseDuration(threshStr)
+		if err != nil {
+			return gomcp.NewToolResultError(fmt.Sprintf("invalid threshold %q: %v", threshStr, err)), nil
+		}
+
+		sites, err := e.Stale(ctx, threshold)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		return JsonResult(map[string]any{
+			"threshold": threshStr,
+			"stale":     sites,
+			"count":     len(sites),
+		})
+	}
+}
+
+// parseDuration handles "7d", "24h", "30m" etc. — extends time.ParseDuration with day support.
+func parseDuration(s string) (time.Duration, error) {
+	if strings.HasSuffix(s, "d") {
+		days := strings.TrimSuffix(s, "d")
+		var n int
+		if _, err := fmt.Sscanf(days, "%d", &n); err != nil {
+			return 0, fmt.Errorf("invalid days: %s", s)
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	return time.ParseDuration(s)
+}
+
+// --- trove_find ---
+
+func findTool() gomcp.Tool {
+	return gomcp.NewTool("trove_find",
+		gomcp.WithDescription("Find files by path pattern. Use this when you know roughly what path you want (e.g. '/api/', '/specification/'). Faster than search for path-based lookups."),
+		gomcp.WithString("site",
+			gomcp.Required(),
+			gomcp.Description("The domain (e.g. stripe.com)"),
+		),
+		gomcp.WithString("pattern",
+			gomcp.Required(),
+			gomcp.Description("Path substring to match (e.g. '/api/', 'getting-started', '.txt')"),
+		),
+	)
+}
+
+func findHandler(e *engine.Engine) ToolHandler {
+	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
+		site := StringArg(req, "site", "")
+		pattern := StringArg(req, "pattern", "")
+		if site == "" || pattern == "" {
+			return gomcp.NewToolResultError("site and pattern are required"), nil
+		}
+
+		files, err := e.ListFiles(ctx, site)
+		if err != nil {
+			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		patternLower := strings.ToLower(pattern)
+		var matches []engine.FileEntry
+		for _, f := range files {
+			if strings.Contains(strings.ToLower(f.Path), patternLower) {
+				matches = append(matches, f)
+			}
+		}
+
+		return JsonResult(map[string]any{
+			"site":    site,
+			"pattern": pattern,
+			"matches": matches,
+			"count":   len(matches),
 		})
 	}
 }

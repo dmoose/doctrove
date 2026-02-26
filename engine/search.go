@@ -13,6 +13,7 @@ type SearchHit = store.SearchHit
 // SearchResult wraps search hits with metadata.
 type SearchResult struct {
 	Hits       []SearchHit `json:"results"`
+	TotalCount int         `json:"total_count"`
 	Suggestion string      `json:"suggestion,omitempty"`
 }
 
@@ -40,7 +41,24 @@ func (e *Engine) Search(ctx context.Context, query string, site, contentType, ca
 		return nil, err
 	}
 
-	result := &SearchResult{Hits: hits}
+	// Get total count (same filters, no limit/offset)
+	totalCount := len(hits)
+	if offset > 0 || len(hits) == limit {
+		// Only run count query when pagination might be hiding results
+		allHits, countErr := e.Index.Search(query, store.SearchOpts{
+			Site:        site,
+			ContentType: contentType,
+			Category:    category,
+			Path:        path,
+			Limit:       10000,
+			Offset:      0,
+		})
+		if countErr == nil {
+			totalCount = len(allHits)
+		}
+	}
+
+	result := &SearchResult{Hits: hits, TotalCount: totalCount}
 	if len(hits) == 0 {
 		result.Suggestion = "No local results. Use trove_discover to check if a URL has LLM content, or trove_scan to add and sync a site."
 	}

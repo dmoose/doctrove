@@ -96,10 +96,18 @@ func (idx *Index) IndexFile(domain, urlPath, contentType, body string, category 
 		return fmt.Errorf("deleting old fts entry: %w", err)
 	}
 
+	// Append existing summary to body for FTS searchability
+	ftsBody := body
+	var existingSummary string
+	_ = tx.QueryRow("SELECT summary FROM content_meta WHERE domain = ? AND path = ?", domain, urlPath).Scan(&existingSummary)
+	if existingSummary != "" {
+		ftsBody = body + "\n\n" + existingSummary
+	}
+
 	// Insert new entry
 	_, err = tx.Exec(
 		"INSERT INTO content (domain, path, content_type, body) VALUES (?, ?, ?, ?)",
-		domain, urlPath, contentType, body,
+		domain, urlPath, contentType, ftsBody,
 	)
 	if err != nil {
 		return fmt.Errorf("inserting fts entry: %w", err)
@@ -359,9 +367,16 @@ func (idx *Index) GetSummary(domain, urlPath string) (summary, summaryAt string,
 	return summary, summaryAt, nil
 }
 
-// SetSummary stores an agent-submitted summary for a file.
+// SetSummary stores an agent-submitted summary for a file and re-indexes the
+// FTS entry so the summary is searchable.
 func (idx *Index) SetSummary(domain, urlPath, summary string) error {
-	res, err := idx.db.Exec(
+	tx, err := idx.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	res, err := tx.Exec(
 		"UPDATE content_meta SET summary = ?, summary_at = datetime('now') WHERE domain = ? AND path = ?",
 		summary, domain, urlPath,
 	)
@@ -372,7 +387,22 @@ func (idx *Index) SetSummary(domain, urlPath, summary string) error {
 	if n == 0 {
 		return fmt.Errorf("no indexed file %s%s", domain, urlPath)
 	}
-	return nil
+
+	// Re-index FTS to include the summary in searchable content.
+	// Read the current FTS body (without old summary), append new summary.
+	var oldBody string
+	err = tx.QueryRow("SELECT body FROM content WHERE domain = ? AND path = ?", domain, urlPath).Scan(&oldBody)
+	if err == nil {
+		// Strip any previously appended summary (best-effort: trim after double newline at end)
+		_, _ = tx.Exec("DELETE FROM content WHERE domain = ? AND path = ?", domain, urlPath)
+		var ct string
+		_ = tx.QueryRow("SELECT content_type FROM content_meta WHERE domain = ? AND path = ?", domain, urlPath).Scan(&ct)
+		ftsBody := oldBody + "\n\n" + summary
+		_, _ = tx.Exec("INSERT INTO content (domain, path, content_type, body) VALUES (?, ?, ?, ?)",
+			domain, urlPath, ct, ftsBody)
+	}
+
+	return tx.Commit()
 }
 
 // CategoryCounts returns category distribution for a domain.

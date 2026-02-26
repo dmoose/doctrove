@@ -7,14 +7,15 @@ import (
 )
 
 // CatalogEntry is a compact summary of a tracked site's LLM content,
-// derived from its llms.txt structure.
+// derived from its llms.txt structure and category index.
 type CatalogEntry struct {
-	Domain      string   `json:"domain"`
-	URL         string   `json:"url"`
-	Title       string   `json:"title,omitempty"`       // H1 from llms.txt
-	Description string   `json:"description,omitempty"` // Blockquote from llms.txt
-	Topics      []string `json:"topics,omitempty"`      // H2 sections from llms.txt
-	FileCount   int      `json:"file_count"`
+	Domain      string         `json:"domain"`
+	URL         string         `json:"url"`
+	Title       string         `json:"title,omitempty"`       // H1 from llms.txt
+	Description string         `json:"description,omitempty"` // Blockquote from llms.txt
+	Topics      []string       `json:"topics,omitempty"`      // H2/H3 sections from llms.txt
+	Categories  map[string]int `json:"categories,omitempty"`  // category → file count
+	FileCount   int            `json:"file_count"`
 }
 
 // Catalog returns a compact summary of all tracked sites, extracting
@@ -35,6 +36,12 @@ func (e *Engine) Catalog(ctx context.Context) ([]CatalogEntry, error) {
 		body, err := e.Store.ReadContent(domain, "/llms.txt")
 		if err == nil {
 			entry.Title, entry.Description, entry.Topics = parseLLMSTxt(string(body))
+		}
+
+		// Always include category distribution — more useful than sparse topics
+		cats, _ := e.Index.CategoryCounts(domain)
+		if len(cats) > 0 {
+			entry.Categories = cats
 		}
 
 		entries = append(entries, entry)
@@ -74,10 +81,11 @@ func parseLLMSTxt(content string) (title, description string, topics []string) {
 			inBlockquote = false
 		}
 
-		// H2 — topics
+		// H2 and H3 — topics (H3 gives finer-grained signal)
 		if after, ok := strings.CutPrefix(trimmed, "## "); ok {
-			topic := after
-			topics = append(topics, topic)
+			topics = append(topics, after)
+		} else if after, ok := strings.CutPrefix(trimmed, "### "); ok {
+			topics = append(topics, after)
 		}
 	}
 
