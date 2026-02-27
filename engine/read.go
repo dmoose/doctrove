@@ -14,6 +14,7 @@ type OutlineResult struct {
 	Path      string            `json:"path"`
 	TotalSize int               `json:"total_size"`
 	Summary   string            `json:"summary,omitempty"`
+	Hint      string            `json:"hint,omitempty"`
 	Sections  []content.Section `json:"sections"`
 	Truncated bool              `json:"truncated,omitempty"`
 }
@@ -31,16 +32,34 @@ func (e *Engine) Outline(ctx context.Context, domain, path string, maxDepth, max
 	proc := e.processorFor(path, "")
 	result := proc.Outline(text, maxDepth, maxSections)
 
+	// Get unfiltered count to generate accurate hints when maxDepth filters sections
+	var unfilteredCount int
+	if maxDepth > 0 || maxSections > 0 {
+		unfiltered := proc.Outline(text, 0, 0)
+		unfilteredCount = len(unfiltered.Sections)
+	} else {
+		unfilteredCount = len(result.Sections)
+	}
+
 	summary, _, _ := e.Index.GetSummary(domain, path)
 
-	return &OutlineResult{
+	out := &OutlineResult{
 		Domain:    domain,
 		Path:      path,
 		TotalSize: len(text),
 		Summary:   summary,
 		Sections:  result.Sections,
 		Truncated: result.Truncated,
-	}, nil
+	}
+
+	// Hint for degenerate files with no sub-headings
+	if unfilteredCount <= 1 && len(text) > 5000 {
+		out.Hint = "This file has no sub-headings for section-based reading. Use trove_read with max_lines to preview, or trove_search to find specific content within it."
+	} else if len(result.Sections) < unfilteredCount && maxDepth > 0 {
+		out.Hint = fmt.Sprintf("Showing %d of %d sections (max_depth=%d). Increase max_depth to see deeper headings.", len(result.Sections), unfilteredCount, maxDepth)
+	}
+
+	return out, nil
 }
 
 // ReadSection reads a specific section of a file by heading match, or a line range.

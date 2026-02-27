@@ -38,7 +38,8 @@ type Result struct {
 	Domain       string           `json:"domain"`
 	BaseURL      string           `json:"base_url"`
 	Files        []DiscoveredFile `json:"files"`
-	Platform     *Platform        `json:"platform,omitempty"` // detected doc platform/theme
+	ProbedPaths  []string         `json:"probed_paths,omitempty"` // paths that were checked (shown when no files found)
+	Platform     *Platform        `json:"platform,omitempty"`     // detected doc platform/theme
 	DiscoveredAt time.Time        `json:"discovered_at"`
 }
 
@@ -162,6 +163,20 @@ func (p *SiteProvider) Discover(ctx context.Context, baseURL string) (*Result, e
 	// This runs on first discovery to inform HTML cleaning selectors.
 	if platform := p.detectPlatform(ctx, baseURL); platform != nil {
 		result.Platform = platform
+	}
+
+	// When no files found, report what we probed so agents know we actually checked
+	if len(result.Files) == 0 {
+		base := strings.TrimRight(baseURL, "/")
+		probed := make([]string, 0, len(wellKnownPaths)+len(seedPaths)+1)
+		for _, wk := range wellKnownPaths {
+			probed = append(probed, base+wk.Path)
+		}
+		probed = append(probed, base+"/sitemap.xml")
+		for _, sp := range seedPaths {
+			probed = append(probed, base+sp)
+		}
+		result.ProbedPaths = probed
 	}
 
 	return result, nil

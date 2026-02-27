@@ -24,7 +24,7 @@ type Settings struct {
 	MaxProbes      int    `yaml:"max_probes,omitempty"`      // companion probes per llms.txt
 	UserAgent      string `yaml:"user_agent,omitempty"`      // User-Agent header
 	EventsURL      string `yaml:"events_url,omitempty"`      // URL for event relay (e.g. http://localhost:6060/events)
-	Context7APIKey string `yaml:"context7_api_key,omitempty"` // Context7 API key (starts with ctx7sk)
+	Context7APIKey string `yaml:"context7_api_key"` // Context7 API key (starts with ctx7sk)
 }
 
 // DefaultSettings returns settings with sane defaults.
@@ -142,5 +142,13 @@ func (c *Config) RemoveSite(domain string) error {
 func (c *Config) UpdateLastSync(domain string, t time.Time) {
 	if site, ok := c.Sites[domain]; ok {
 		site.LastSync = t
+	}
+}
+
+// SetContentTypes updates the content_types filter for a site, allowing
+// agents to widen or narrow the filter after initial scan.
+func (c *Config) SetContentTypes(domain, contentTypes string) {
+	if site, ok := c.Sites[domain]; ok {
+		site.ContentTypes = contentTypes
 	}
 }

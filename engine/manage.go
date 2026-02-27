@@ -31,10 +31,17 @@ type SyncResult struct {
 	Committed bool      `json:"committed"`
 }
 
+// CheckFile describes a file available for syncing.
+type CheckFile struct {
+	Path        string `json:"path"`
+	Size        int    `json:"size"`
+	ContentType string `json:"content_type"`
+}
+
 // CheckResult reports what would change without downloading.
 type CheckResult struct {
-	Domain    string   `json:"domain"`
-	Available []string `json:"available"`
+	Domain    string      `json:"domain"`
+	Available []CheckFile `json:"available"`
 }
 
 // ChangeEntry is a git log entry.
@@ -147,14 +154,18 @@ func (e *Engine) Check(ctx context.Context, domain string) (*CheckResult, error)
 		return nil, fmt.Errorf("discovering content for %s: %w", domain, err)
 	}
 
-	var paths []string
+	var files []CheckFile
 	for _, f := range result.Files {
-		paths = append(paths, f.Path)
+		files = append(files, CheckFile{
+			Path:        f.Path,
+			Size:        f.Size,
+			ContentType: string(f.ContentType),
+		})
 	}
 
 	return &CheckResult{
 		Domain:    domain,
-		Available: paths,
+		Available: files,
 	}, nil
 }
 

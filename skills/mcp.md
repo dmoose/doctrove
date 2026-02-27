@@ -19,6 +19,17 @@ Add to your MCP config (Claude Code, Cursor, etc.):
 
 Run `doctrove mcp-config` to generate config with the correct binary path.
 
+## Context7 (Enhanced Discovery)
+
+When a Context7 API key is configured (`context7_api_key` in `doctrove.yaml`), you can resolve bare library names to curated documentation:
+
+```
+trove_scan  url="react"
+trove_scan  url="stripe-node"
+```
+
+This fetches version-aware, community-maintained doc snippets — often higher quality than raw llms.txt content. Results are stored under synthetic domains (e.g. `context7.com~facebook_react`). Get a key at https://context7.com.
+
 ## Discovery & Ingestion
 
 ### Find out what a site has
@@ -31,7 +42,7 @@ Probes for llms.txt, companion files, sitemap, well-known paths. Returns file li
 ```
 trove_scan  url="https://stripe.com"
 ```
-Discovers, tracks, and syncs in one step. Use `content_types="llms-txt"` to only grab the index file.
+Discovers, tracks, and syncs in one step. Use `content_types="llms-txt"` to only grab the index file. Can be called again on an already-tracked site to widen or change the `content_types` filter without needing to remove and re-add.
 
 ### Refresh a tracked site
 ```
@@ -53,7 +64,7 @@ trove_search  query="authentication"  category="api-reference"  limit=10
 ```
 Returns snippets, categories, and cached summaries. Check summaries before reading full files. Supports FTS5 query syntax. Use `path="/specification/"` to filter by path.
 
-Results include `total_count` for pagination awareness.
+Results include `total_count`, `offset`, `limit`, and `has_more` for pagination. Use `offset` and `limit` to page through large result sets.
 
 ### Find files by path
 ```
@@ -65,13 +76,13 @@ Case-insensitive path substring matching. Faster than search when you know the p
 ```
 trove_outline  site="stripe.com"  path="/docs/api.md"  max_depth=2
 ```
-Returns heading tree with section sizes. If a summary exists, it's included — check if it answers your question before reading.
+Returns heading tree with section sizes. If a summary exists, it's included — check if it answers your question before reading. When `max_depth` filters out deeper headings, a hint shows how many total sections exist. For files with no headings at all, a hint suggests `max_lines` or search instead.
 
 ### Read a specific section
 ```
 trove_read  site="stripe.com"  path="/docs/api.md"  section="Authentication"
 ```
-Case-insensitive substring match on heading. Returns content from that heading to the next heading of same/higher level. Use `max_lines=50` to preview.
+Case-insensitive heading match. Prefers exact matches and narrower (deeper) headings over broader ones — e.g., `section="Tool"` matches `### Tool` over `# Tools`. Returns content from that heading to the next heading of same/higher level. Use `max_lines=50` to preview.
 
 ### Get full content of best match
 ```
@@ -110,7 +121,7 @@ Total sites, files, disk usage, sync freshness.
 ```
 trove_tag  site="stripe.com"  path="/payments"  category="guide"
 ```
-Persists across re-syncs. Do this when you notice a miscategorized page.
+Persists across re-syncs. Do this when you notice a miscategorized page. Category must be one of: `api-reference`, `tutorial`, `guide`, `spec`, `changelog`, `marketing`, `legal`, `community`, `context7`, `index`, `other`.
 
 ### Cache a summary
 ```
@@ -128,8 +139,11 @@ trove_history  site="stripe.com"  limit=5
 ### Diff between syncs
 ```
 trove_diff  from="HEAD~2"  to="HEAD"
+trove_diff  since="2h"                    # all changes in the last 2 hours
+trove_diff  since="1d"  stat=true         # last day, compact summary
+trove_diff  stat=true                     # compact file-level summary
 ```
-Shows content-only changes (internal metadata filtered out).
+Shows content-only changes (internal metadata filtered out). Use `stat=true` to get a compact summary of changed files with line counts before requesting the full diff. The `since` parameter accepts durations like `30m`, `2h`, `7d`.
 
 ## Tips
 

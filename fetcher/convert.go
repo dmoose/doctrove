@@ -52,6 +52,17 @@ func ConvertHTML(html string, selectors ...[]string) (string, error) {
 	return md, nil
 }
 
+// reMDXComponent matches self-closing and block MDX/JSX component tags
+// like <Card>, <Note>, <Tab>, <Frame>, <Warning>, <Info>, <Step>, etc.
+// These are framework artifacts that add noise to mirrored content.
+var reMDXComponent = regexp.MustCompile(`</?(?:Card|Note|Tab|Tabs|Frame|Warning|Info|Step|Steps|Tip|Accordion|AccordionGroup|CardGroup|ResponseField|Expandable|ParamField|CodeGroup)\b[^>]*>`)
+
+// reMDXExport matches MDX export statements (export const/function/default).
+var reMDXExport = regexp.MustCompile(`(?m)^export\s+(?:const|function|default|let|var)\b[^\n]*(?:\n(?:[ \t].*|\{.*\}.*|.*\);?\s*))*`)
+
+// reMDXDiv matches div tags with id attributes commonly used for MDX features.
+var reMDXDiv = regexp.MustCompile(`<div\s+id="[^"]*"\s*/?>`)
+
 // reMultiNewlines matches 3+ consecutive newlines.
 var reMultiNewlines = regexp.MustCompile(`\n{3,}`)
 
@@ -77,6 +88,49 @@ func cleanWhitespace(content string) string {
 	content = reSpaceBeforePunct.ReplaceAllString(content, "$1")
 
 	return content
+}
+
+// CleanMDX strips MDX/JSX component tags and export statements from markdown
+// content. These are framework artifacts (Mintlify, Nextra, etc.) that add
+// noise without contributing documentation value.
+func CleanMDX(content string) string {
+	// Strip MDX component tags
+	content = reMDXComponent.ReplaceAllString(content, "")
+	// Strip export statements
+	content = reMDXExport.ReplaceAllString(content, "")
+	// Strip MDX div markers
+	content = reMDXDiv.ReplaceAllString(content, "")
+	// Strip Documentation Index banners (added by some sites to every page)
+	content = stripDocIndexBanner(content)
+	// Clean up resulting whitespace
+	content = reMultiNewlines.ReplaceAllString(content, "\n\n")
+	return strings.TrimLeft(content, "\n")
+}
+
+// stripDocIndexBanner removes common "fetch the documentation index" blockquote
+// banners that some sites inject into every companion page.
+func stripDocIndexBanner(content string) string {
+	lines := strings.Split(content, "\n")
+	var result []string
+	skip := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "> ## Documentation Index") ||
+			strings.HasPrefix(trimmed, "> Fetch the complete documentation index") ||
+			strings.HasPrefix(trimmed, "> Use this file to discover all available pages") {
+			skip = true
+			continue
+		}
+		if skip && (trimmed == "" || strings.HasPrefix(trimmed, ">")) {
+			if trimmed == "" {
+				skip = false
+			}
+			continue
+		}
+		skip = false
+		result = append(result, line)
+	}
+	return strings.Join(result, "\n")
 }
 
 // looksLikeNavPage returns true if the markdown is mostly short lines

@@ -241,7 +241,7 @@ func (idx *Index) Search(query string, opts SearchOpts) ([]SearchHit, error) {
 // stripping FTS5 operators.
 func queryWords(query string) []string {
 	var words []string
-	for _, w := range strings.Fields(query) {
+	for w := range strings.FieldsSeq(query) {
 		// Skip FTS5 operators
 		upper := strings.ToUpper(w)
 		if upper == "AND" || upper == "OR" || upper == "NOT" || upper == "NEAR" {

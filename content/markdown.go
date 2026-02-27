@@ -86,20 +86,23 @@ func (m *MarkdownProcessor) Outline(text string, maxDepth, maxSections int) Outl
 func (m *MarkdownProcessor) ReadSection(text, sectionName string) (string, error) {
 	lines := strings.Split(text, "\n")
 	sectionLower := strings.ToLower(sectionName)
-	startIdx := -1
-	startLevel := 0
-	inCodeBlock := false
 
+	// Collect all headings with their indices and levels.
+	type heading struct {
+		text  string
+		lower string
+		line  int
+		level int
+	}
+	var headings []heading
+	inCodeBlock := false
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "```") {
 			inCodeBlock = !inCodeBlock
 			continue
 		}
-		if inCodeBlock {
-			continue
-		}
-		if !strings.HasPrefix(trimmed, "#") {
+		if inCodeBlock || !strings.HasPrefix(trimmed, "#") {
 			continue
 		}
 		level := 0
@@ -110,19 +113,44 @@ func (m *MarkdownProcessor) ReadSection(text, sectionName string) (string, error
 				break
 			}
 		}
-		heading := strings.TrimSpace(trimmed[level:])
-		if startIdx == -1 {
-			if strings.Contains(strings.ToLower(heading), sectionLower) {
-				startIdx = i
-				startLevel = level
-			}
-		} else if level <= startLevel {
-			return strings.Join(lines[startIdx:i], "\n"), nil
+		h := strings.TrimSpace(trimmed[level:])
+		if h == "" {
+			continue
+		}
+		headings = append(headings, heading{text: h, lower: strings.ToLower(h), line: i, level: level})
+	}
+
+	// Find best match: prefer exact match, then exact-case-insensitive,
+	// then substring on deeper (narrower) headings first.
+	bestIdx := -1
+	bestScore := -1 // higher is better
+	for i, h := range headings {
+		score := 0
+		if h.lower == sectionLower {
+			score = 1000 + h.level // exact match, prefer deeper
+		} else if strings.Contains(h.lower, sectionLower) {
+			score = h.level // substring match, prefer deeper (narrower)
+		} else {
+			continue
+		}
+		if score > bestScore {
+			bestScore = score
+			bestIdx = i
 		}
 	}
 
-	if startIdx >= 0 {
-		return strings.Join(lines[startIdx:], "\n"), nil
+	if bestIdx < 0 {
+		return "", fmt.Errorf("%w: %q", ErrSectionNotFound, sectionName)
 	}
-	return "", fmt.Errorf("%w: %q", ErrSectionNotFound, sectionName)
+
+	startLine := headings[bestIdx].line
+	startLevel := headings[bestIdx].level
+
+	// Find end: next heading at same or higher level
+	for j := bestIdx + 1; j < len(headings); j++ {
+		if headings[j].level <= startLevel {
+			return strings.Join(lines[startLine:headings[j].line], "\n"), nil
+		}
+	}
+	return strings.Join(lines[startLine:], "\n"), nil
 }

@@ -65,6 +65,25 @@ func scanHandler(e *engine.Engine) ToolHandler {
 
 		info, err := e.Init(ctx, url)
 		if err != nil {
+			// If already tracked, update content_types and re-sync instead of failing
+			if strings.Contains(err.Error(), "already tracked") {
+				domain := domainFromURL(url)
+				if contentTypes != "" {
+					e.Config.SetContentTypes(domain, contentTypes)
+				} else {
+					e.Config.SetContentTypes(domain, "")
+				}
+				var syncResult *engine.SyncResult
+				if contentTypes != "" {
+					syncResult, err = e.SyncWithContentTypes(ctx, domain, contentTypes)
+				} else {
+					syncResult, err = e.Sync(ctx, domain)
+				}
+				if err != nil {
+					return gomcp.NewToolResultError(fmt.Sprintf("sync: %v", err)), nil
+				}
+				return scanResult(syncResult)
+			}
 			return gomcp.NewToolResultError(fmt.Sprintf("init: %v", err)), nil
 		}
 
@@ -78,21 +97,41 @@ func scanHandler(e *engine.Engine) ToolHandler {
 			return gomcp.NewToolResultError(fmt.Sprintf("sync: %v", err)), nil
 		}
 
-		result := map[string]any{
-			"domain":    syncResult.Domain,
-			"added":     len(syncResult.Added),
-			"updated":   len(syncResult.Updated),
-			"unchanged": len(syncResult.Unchanged),
-			"skipped":   len(syncResult.Skipped),
-			"sync_time": syncResult.SyncTime,
-			"committed": syncResult.Committed,
-		}
-		if len(syncResult.Errors) > 0 {
-			result["warnings"] = len(syncResult.Errors)
-			result["warning_details"] = syncResult.Errors
-		}
-		return JsonResult(result)
+		return scanResult(syncResult)
 	}
+}
+
+func scanResult(syncResult *engine.SyncResult) (*gomcp.CallToolResult, error) {
+	result := map[string]any{
+		"domain":    syncResult.Domain,
+		"added":     len(syncResult.Added),
+		"updated":   len(syncResult.Updated),
+		"unchanged": len(syncResult.Unchanged),
+		"skipped":   len(syncResult.Skipped),
+		"sync_time": syncResult.SyncTime,
+		"committed": syncResult.Committed,
+	}
+	if len(syncResult.Errors) > 0 {
+		result["warnings"] = len(syncResult.Errors)
+		result["warning_details"] = syncResult.Errors
+	}
+	return JsonResult(result)
+}
+
+// domainFromURL extracts the domain from a URL string.
+func domainFromURL(rawURL string) string {
+	start := 0
+	if idx := strings.Index(rawURL, "://"); idx >= 0 {
+		start = idx + 3
+	}
+	end := len(rawURL)
+	for i := start; i < len(rawURL); i++ {
+		if rawURL[i] == '/' {
+			end = i
+			break
+		}
+	}
+	return rawURL[start:end]
 }
 
 // --- trove_search ---
@@ -242,7 +281,7 @@ func readHandler(e *engine.Engine) ToolHandler {
 
 		content, err := e.ReadSection(ctx, site, path, section, maxLines)
 		if err != nil {
-			return gomcp.NewToolResultError(fmt.Sprintf("reading %s%s: %v", site, path, err)), nil
+			return gomcp.NewToolResultError(sanitizeError(site, path, err)), nil
 		}
 
 		lastSync := "unknown"
@@ -302,12 +341,18 @@ func statusHandler(e *engine.Engine) ToolHandler {
 
 func diffTool() gomcp.Tool {
 	return gomcp.NewTool("trove_diff",
-		gomcp.WithDescription("Show content changes between git refs (defaults to last change)"),
+		gomcp.WithDescription("Show content changes between git refs (defaults to last change). Use stat=true to get a compact summary of changed files instead of full diff (recommended first to gauge size)."),
 		gomcp.WithString("from",
 			gomcp.Description("Start ref (e.g. HEAD~2). Omit for parent of 'to'"),
 		),
 		gomcp.WithString("to",
 			gomcp.Description("End ref (default HEAD)"),
+		),
+		gomcp.WithString("since",
+			gomcp.Description("Time-based range (e.g. '2h', '1d', '30m'). Alternative to from/to — finds the oldest commit within this duration and diffs from there."),
+		),
+		gomcp.WithBoolean("stat",
+			gomcp.Description("If true, return only a file-level summary (names + line counts) instead of full diff"),
 		),
 	)
 }
@@ -318,6 +363,31 @@ func diffHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
 		from := StringArg(req, "from", "")
 		to := StringArg(req, "to", "HEAD")
+		since := StringArg(req, "since", "")
+		stat := BoolArg(req, "stat", false)
+
+		// If "since" is provided, resolve it to a git ref by walking the log.
+		if since != "" && from == "" {
+			dur, parseErr := parseDuration(since)
+			if parseErr != nil {
+				return gomcp.NewToolResultError(fmt.Sprintf("invalid since duration %q: %v", since, parseErr)), nil
+			}
+			cutoff := time.Now().Add(-dur)
+			entries, logErr := e.History(ctx, "", 1000)
+			if logErr != nil {
+				return gomcp.NewToolResultError(logErr.Error()), nil
+			}
+			// Find the oldest commit newer than cutoff
+			for i := len(entries) - 1; i >= 0; i-- {
+				if entries[i].When.After(cutoff) {
+					from = entries[i].Hash + "~1"
+					break
+				}
+			}
+			if from == "" {
+				return gomcp.NewToolResultText(fmt.Sprintf("No changes in the last %s.", since)), nil
+			}
+		}
 
 		diff, err := e.Diff(ctx, from, to)
 		if err != nil {
@@ -331,14 +401,57 @@ func diffHandler(e *engine.Engine) ToolHandler {
 			return gomcp.NewToolResultText("No changes."), nil
 		}
 
+		if stat {
+			return JsonResult(diffStat(diff))
+		}
+
 		if len(diff) > maxDiffBytes {
 			diff = diff[:maxDiffBytes] + fmt.Sprintf(
-				"\n\n… truncated (%d bytes total, showing first %d). Use from/to refs to narrow the range.",
+				"\n\n… truncated (%d bytes total, showing first %d). Use stat=true for a summary, or from/to refs to narrow the range.",
 				len(diff), maxDiffBytes,
 			)
 		}
 		return gomcp.NewToolResultText(diff), nil
 	}
+}
+
+// diffStatEntry summarizes changes for a single file.
+type diffStatEntry struct {
+	File    string `json:"file"`
+	Added   int    `json:"added"`
+	Removed int    `json:"removed"`
+}
+
+// diffStat parses a unified diff into per-file line change summaries.
+func diffStat(diff string) []diffStatEntry {
+	parts := strings.Split(diff, "diff --git")
+	var entries []diffStatEntry
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		// Extract filename from "a/sites/domain/path b/sites/domain/path"
+		firstLine := part
+		if before, _, ok := strings.Cut(part, "\n"); ok {
+			firstLine = before
+		}
+		fields := strings.Fields(firstLine)
+		file := ""
+		if len(fields) >= 2 {
+			file = strings.TrimPrefix(fields[1], "b/sites/")
+		}
+
+		added, removed := 0, 0
+		for line := range strings.SplitSeq(part, "\n") {
+			if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+				added++
+			} else if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+				removed++
+			}
+		}
+		entries = append(entries, diffStatEntry{File: file, Added: added, Removed: removed})
+	}
+	return entries
 }
 
 // filterDiffToContent strips diff hunks for internal files (lock, config, metadata).
@@ -540,6 +653,13 @@ func tagTool() gomcp.Tool {
 	)
 }
 
+// validCategories is the set of allowed category values for trove_tag.
+var validCategories = map[string]bool{
+	"api-reference": true, "tutorial": true, "guide": true, "spec": true,
+	"changelog": true, "marketing": true, "legal": true, "community": true,
+	"context7": true, "index": true, "other": true,
+}
+
 func tagHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
 		site := StringArg(req, "site", "")
@@ -547,6 +667,14 @@ func tagHandler(e *engine.Engine) ToolHandler {
 		category := StringArg(req, "category", "")
 		if site == "" || path == "" || category == "" {
 			return gomcp.NewToolResultError("site, path, and category are required"), nil
+		}
+
+		if !validCategories[category] {
+			valid := make([]string, 0, len(validCategories))
+			for k := range validCategories {
+				valid = append(valid, k)
+			}
+			return gomcp.NewToolResultError(fmt.Sprintf("invalid category %q — valid categories: %s", category, strings.Join(valid, ", "))), nil
 		}
 
 		if err := e.Tag(ctx, site, path, category); err != nil {
@@ -746,8 +874,8 @@ func staleHandler(e *engine.Engine) ToolHandler {
 
 // parseDuration handles "7d", "24h", "30m" etc. — extends time.ParseDuration with day support.
 func parseDuration(s string) (time.Duration, error) {
-	if strings.HasSuffix(s, "d") {
-		days := strings.TrimSuffix(s, "d")
+	if before, ok := strings.CutSuffix(s, "d"); ok {
+		days := before
 		var n int
 		if _, err := fmt.Sscanf(days, "%d", &n); err != nil {
 			return 0, fmt.Errorf("invalid days: %s", s)
@@ -813,4 +941,23 @@ func JsonResult(v any) (*gomcp.CallToolResult, error) {
 		return gomcp.NewToolResultError(fmt.Sprintf("marshaling result: %v", err)), nil
 	}
 	return gomcp.NewToolResultText(string(data)), nil
+}
+
+// sanitizeError strips filesystem paths from error messages so agents
+// only see the logical site/path identifier, not local disk locations.
+func sanitizeError(site, path string, err error) string {
+	msg := err.Error()
+	// Strip any "open /full/path/to/sites/domain/urlpath: " prefix
+	if idx := strings.Index(msg, ": open "); idx >= 0 {
+		// Find the actual OS error after the filesystem path
+		rest := msg[idx+2:]
+		if osIdx := strings.LastIndex(rest, ": "); osIdx >= 0 {
+			return fmt.Sprintf("file not found: %s%s", site, path)
+		}
+	}
+	// Also catch direct "open /path: no such file" patterns
+	if strings.Contains(msg, "no such file or directory") {
+		return fmt.Sprintf("file not found: %s%s", site, path)
+	}
+	return fmt.Sprintf("reading %s%s: %v", site, path, err)
 }

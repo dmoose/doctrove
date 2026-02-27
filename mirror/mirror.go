@@ -178,6 +178,9 @@ func (m *Mirror) Sync(ctx context.Context, result *discovery.Result, filter Filt
 		}
 		content = RewriteLinks(content, result.BaseURL)
 
+		// Strip MDX/JSX framework artifacts from markdown content
+		content = fetcher.CleanMDX(content)
+
 		// Compare with existing content to classify as Added/Updated/Unchanged
 		newBytes := []byte(content)
 		existing, readErr := m.Store.ReadContent(result.Domain, file.Path)

@@ -222,6 +222,42 @@ func TestSyncMultipleFiles(t *testing.T) {
 	}
 }
 
+func TestSyncPathCollision(t *testing.T) {
+	dir := t.TempDir()
+	s := store.New(dir)
+	f := fetcher.New(fetcher.Options{})
+	m := New(f, s, &stubIndexer{})
+
+	// Simulate the deno.com scenario: /deploy as a page, then /deploy/getting_started
+	result := &discovery.Result{
+		Domain:  "docs.deno.com",
+		BaseURL: "https://docs.deno.com",
+		Files: []discovery.DiscoveredFile{
+			{Path: "/deploy", ContentType: discovery.TypeCompanion, Body: []byte("# Deno Deploy")},
+			{Path: "/deploy/getting_started", ContentType: discovery.TypeCompanion, Body: []byte("# Getting Started")},
+			{Path: "/deploy/kv", ContentType: discovery.TypeCompanion, Body: []byte("# KV Store")},
+		},
+	}
+
+	sr, err := m.Sync(context.Background(), result, nil)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(sr.Added) != 3 {
+		t.Errorf("expected 3 added, got %d (errors: %v)", len(sr.Added), sr.Errors)
+	}
+	if len(sr.Errors) != 0 {
+		t.Errorf("expected 0 errors, got %v", sr.Errors)
+	}
+
+	// All three files should be readable
+	for _, path := range []string{"/deploy", "/deploy/getting_started", "/deploy/kv"} {
+		if _, err := s.ReadContent("docs.deno.com", path); err != nil {
+			t.Errorf("ReadContent(%q): %v", path, err)
+		}
+	}
+}
+
 func TestSyncEmptyResult(t *testing.T) {
 	dir := t.TempDir()
 	s := store.New(dir)

@@ -95,22 +95,22 @@ Example config:
 | Tool | Description |
 |---|---|
 | `trove_discover` | Probe a URL for LLM content |
-| `trove_scan` | Add and sync a site (`content_types` param to filter; persisted for refresh) |
+| `trove_scan` | Add and sync a site (`content_types` param to filter; persisted for refresh; re-scannable) |
 | `trove_refresh` | Re-sync a tracked site, using ETag caching (honours content_types filter) |
-| `trove_check` | Dry-run: show available content without downloading |
+| `trove_check` | Dry-run: show available content with sizes and content types |
 | `trove_search` | Full-text search with `category`, `path` filters; path-boosted ranking; summaries included |
 | `trove_search_full` | Search and return full content of best match (large — prefer outline+section read) |
 | `trove_outline` | Get heading structure with `max_depth` (default 3) and `max_sections` (default 100) caps |
 | `trove_read` | Read a file or specific section by heading match (`section` param) |
 | `trove_summarize` | Store an agent-written summary for a file (visible in search results and outlines) |
-| `trove_tag` | Override category for a file (persists across re-syncs) |
+| `trove_tag` | Override category for a file (validated, persists across re-syncs) |
 | `trove_list` | List tracked sites |
 | `trove_list_files` | Enumerate files with path, size, content type, and category (paginated, `category` filter) |
 | `trove_catalog` | Site summaries with topics |
 | `trove_stats` | Workspace statistics |
 | `trove_status` | Sync status, category breakdown, and staleness for a site |
 | `trove_history` | Git change history |
-| `trove_diff` | Content changes between refs |
+| `trove_diff` | Content changes between refs (`stat` mode for compact summary) |
 | `trove_stale` | List sites not synced within a threshold (default 7d) |
 | `trove_find` | Find files by path pattern (faster than search for path lookups) |
 | `trove_remove` | Stop tracking a site |
@@ -139,6 +139,7 @@ doctrove probes multiple sources for LLM-targeted content:
 - **.well-known:** `tdmrep.json`, `agent.json`, `agents.json`
 - **Context7:** Bare library names (e.g. `react`, `stripe-node`) resolved via Context7 API when `context7_api_key` is configured
 - **HTML conversion:** Sites serving HTML at content URLs (Next.js, SPAs) are converted to markdown
+- **MDX cleanup:** Framework artifacts (JSX components, export statements, boilerplate banners) are stripped from mirrored content
 
 ## Page Categories
 
@@ -149,16 +150,16 @@ Every indexed file is assigned a semantic category for task-appropriate filterin
 | `api-reference` | `/api/`, `/reference/`, code-heavy pages |
 | `tutorial` | `/tutorials/`, `/getting-started/`, `/quickstart` |
 | `guide` | `/guides/`, `/learn/`, `/how-to/` |
-| `spec` | `/specification/`, `/schema` |
+| `spec` | `/specification/`, `/schema`, `/seps/` |
 | `changelog` | `/changelog`, `/release-notes` |
 | `marketing` | `/pricing`, `/use-cases/`, `/customers`, link-heavy pages |
 | `legal` | `/privacy`, `/legal/`, `/terms` |
-| `community` | `/community/`, `/seps/`, `/contributing` |
+| `community` | `/community/`, `/contributing` |
 | `context7` | Content fetched via Context7 API |
 | `index` | llms.txt, llms-full.txt, ai.txt — site index files |
 | `other` | Unclassified companions, well-known metadata |
 
-Categories are assigned by path heuristics (fast) with body analysis as fallback. Agents can override with `trove_tag` / `doctrove tag`.
+Categories are assigned by path heuristics (fast) with body analysis as fallback. Path patterns include `/examples/`, `_tutorial`, `/first_project` for tutorials; `/deploy`, `/sandbox` for guides; `/contributing` for community. Body analysis distinguishes tutorials from API references by prose density between code blocks. Agents can override with `trove_tag` / `doctrove tag`.
 
 ```bash
 # Search only API docs
@@ -167,6 +168,23 @@ doctrove search --category api-reference "hooks"
 # Fix a misclassified page
 doctrove tag stripe.com /payments marketing
 ```
+
+## Context7 Integration
+
+Adding a [Context7](https://context7.com) API key enhances doctrove with curated, version-aware documentation for popular libraries. Instead of only discovering content from a site's own `llms.txt`, you can resolve bare library names (e.g. `react`, `stripe-node`, `nextjs`) to high-quality documentation snippets maintained by the Context7 community.
+
+```yaml
+settings:
+  context7_api_key: ctx7sk-...   # get a key at https://context7.com
+```
+
+```bash
+# Discover and sync Context7 docs for a library
+doctrove scan react
+doctrove scan stripe-node
+```
+
+Content fetched via Context7 is categorized as `context7` and stored under synthetic domains (e.g. `context7.com~facebook_react`), keeping it separate from site-sourced content. Context7 content is subject to [Upstash Terms of Service](https://upstash.com/docs/common/help/legal).
 
 ## ETag Caching
 
@@ -211,6 +229,8 @@ sites:
 ## Storage
 
 Content is stored as plain files under `sites/<domain>/`, tracked by git for change history, with a SQLite FTS5 index for search. The git repo and index are the workspace — share it by cloning.
+
+When a URL path conflicts with a child path (e.g., `/deploy` exists as a file but `/deploy/getting_started` also needs to be stored), the parent file is automatically promoted to a directory and its content is moved to `_index` inside that directory. Both paths remain readable transparently.
 
 ## Event Relay Integration
 

@@ -59,13 +59,17 @@ func categorize(domain, path, contentType, body string) string {
 	}{
 		{[]string{"/changelog", "/release-notes", "/releases"}, CatChangelog},
 		{[]string{"/api/", "/reference/", "/api-reference/"}, CatAPIReference},
-		{[]string{"/tutorial/", "/tutorials/", "/getting-started/", "/quickstart"}, CatTutorial},
-		{[]string{"/guide/", "/guides/", "/learn/", "/how-to/"}, CatGuide},
+		{[]string{"/tutorial/", "/tutorials/", "/getting-started/",
+			"/quickstart", "/first_project", "/examples/",
+			"_tutorial"}, CatTutorial},
+		{[]string{"/guide/", "/guides/", "/learn/", "/how-to/",
+			"/deploy", "/sandbox"}, CatGuide},
 		{[]string{"/spec/", "/specification/", "/schema"}, CatSpec},
 		{[]string{"/resources/more/", "/use-cases/", "/pricing", "/customers", "/industries/",
 			"/enterprise", "/startups", "/sessions", "/blog", "/newsroom"}, CatMarketing},
 		{[]string{"/privacy", "/legal/", "/terms", "/restricted-businesses", "/licenses"}, CatLegal},
-		{[]string{"/community/", "/seps/", "/contributing", "/governance"}, CatCommunity},
+		{[]string{"/seps/"}, CatSpec},
+		{[]string{"/community/", "/contributing", "/governance"}, CatCommunity},
 	}
 
 	for _, rule := range pathRules {
@@ -86,13 +90,21 @@ func categorize(domain, path, contentType, body string) string {
 
 // categorizeByBody uses content signals when path patterns don't match.
 func categorizeByBody(body string) string {
+	lower := strings.ToLower(body)
 	// Each fenced code block has an opening and closing ```, so count pairs.
 	codeMarkers := strings.Count(body, "```")
 	codeBlocks := codeMarkers / 2
 	lines := strings.Count(body, "\n") + 1
 
-	// High code-block density suggests API reference or tutorial
+	// High code-block density suggests API reference or tutorial.
+	// Distinguish by prose density: tutorials have more narrative between blocks.
 	if codeBlocks >= 3 {
+		// Rough prose ratio: non-code characters per code block.
+		// API references are terse; tutorials have more explanation.
+		prosePerBlock := (len(body) / (codeBlocks + 1)) // avg chars between blocks
+		if prosePerBlock > 150 {
+			return CatTutorial
+		}
 		return CatAPIReference
 	}
 
@@ -103,6 +115,17 @@ func categorizeByBody(body string) string {
 		if avgLineLen < 60 && linkCount > lines/3 {
 			return CatMarketing
 		}
+	}
+
+	// Check for tutorial-like language in content
+	tutorialSignals := 0
+	for _, signal := range []string{"step ", "next,", "follow", "walk through", "in this", "let's ", "you will", "you'll "} {
+		if strings.Contains(lower, signal) {
+			tutorialSignals++
+		}
+	}
+	if tutorialSignals >= 2 {
+		return CatTutorial
 	}
 
 	return CatOther

@@ -13,6 +13,17 @@ Override workspace location with `--dir /path/to/workspace` or `DOCTROVE_DIR` en
 
 All commands support `--json` for machine-readable output.
 
+## Context7 (Enhanced Discovery)
+
+With a Context7 API key configured, you can resolve bare library names to curated documentation:
+
+```bash
+doctrove grab react              # fetches Context7 docs for React
+doctrove grab stripe-node        # fetches Context7 docs for Stripe Node SDK
+```
+
+Set `context7_api_key` in `doctrove.yaml`. Get a key at https://context7.com.
+
 ## Discovery & Ingestion
 
 ### Probe a site without tracking
@@ -87,6 +98,8 @@ doctrove history --since 7d      # recent changes
 ```bash
 doctrove diff                    # last change
 doctrove diff HEAD~3 HEAD        # range
+doctrove diff --since 2h         # all changes in last 2 hours
+doctrove diff --since 1d --stat  # last day, compact summary
 ```
 
 ## Management

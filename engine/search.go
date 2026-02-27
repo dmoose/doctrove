@@ -14,6 +14,9 @@ type SearchHit = store.SearchHit
 type SearchResult struct {
 	Hits       []SearchHit `json:"results"`
 	TotalCount int         `json:"total_count"`
+	Offset     int         `json:"offset,omitempty"`
+	Limit      int         `json:"limit,omitempty"`
+	HasMore    bool        `json:"has_more,omitempty"`
 	Suggestion string      `json:"suggestion,omitempty"`
 }
 
@@ -23,6 +26,7 @@ type SearchFullResult struct {
 	Path        string `json:"path,omitempty"`
 	ContentType string `json:"content_type,omitempty"`
 	Category    string `json:"category,omitempty"`
+	Size        int    `json:"size,omitempty"`
 	Content     string `json:"content,omitempty"`
 	Suggestion  string `json:"suggestion,omitempty"`
 }
@@ -58,9 +62,23 @@ func (e *Engine) Search(ctx context.Context, query string, site, contentType, ca
 		}
 	}
 
-	result := &SearchResult{Hits: hits, TotalCount: totalCount}
+	result := &SearchResult{
+		Hits:       hits,
+		TotalCount: totalCount,
+		Offset:     offset,
+		Limit:      limit,
+		HasMore:    offset+len(hits) < totalCount,
+	}
 	if len(hits) == 0 {
-		result.Suggestion = "No local results. Use trove_discover to check if a URL has LLM content, or trove_scan to add and sync a site."
+		if site != "" {
+			if _, ok := e.Config.Sites[site]; !ok {
+				result.Suggestion = fmt.Sprintf("Site %q is not tracked. Use trove_scan to add it, or trove_list to see tracked sites.", site)
+			} else {
+				result.Suggestion = fmt.Sprintf("No results for this query on %s. Try broader terms or check trove_list_files to see what content is available.", site)
+			}
+		} else {
+			result.Suggestion = "No local results. Use trove_discover to check if a URL has LLM content, or trove_scan to add and sync a site."
+		}
 	}
 	return result, nil
 }
@@ -87,6 +105,7 @@ func (e *Engine) SearchFull(ctx context.Context, query string, site, contentType
 	result.Path = hit.Path
 	result.ContentType = hit.ContentType
 	result.Category = hit.Category
+	result.Size = len(body)
 	result.Content = string(body)
 	return result, nil
 }

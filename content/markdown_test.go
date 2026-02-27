@@ -134,6 +134,52 @@ func TestReadSectionSubstring(t *testing.T) {
 	}
 }
 
+func TestReadSectionPrefersNarrowerMatch(t *testing.T) {
+	// The doc has "# Title" (H1) and "### Delete" (H3).
+	// A search for "delete" should match the H3, not the broader H1
+	// even though "Title" doesn't contain "delete".
+	// More importantly: with a doc like "# Tools\n...\n### Tool\n..."
+	// searching for "tool" should prefer "### Tool" (exact, narrower)
+	// over "# Tools" (substring, broader).
+	doc := `# Tools
+
+Top-level content about tools.
+
+## Protocol Messages
+
+### Listing Tools
+
+How to list tools.
+
+### Tool
+
+The Tool data type definition.
+
+### Tool Result
+
+The Tool Result data type.
+`
+	// "tool" should match "### Tool" (exact match, deeper) not "# Tools" (substring, shallower)
+	text, err := proc.ReadSection(doc, "tool")
+	if err != nil {
+		t.Fatalf("ReadSection: %v", err)
+	}
+	if !containsLine(text, "### Tool") {
+		t.Error("should match ### Tool, not # Tools")
+	}
+	if containsLine(text, "Top-level content about tools") {
+		t.Error("should not include top-level content from # Tools")
+	}
+	// "Tool Result" should still work as exact match
+	text2, err := proc.ReadSection(doc, "Tool Result")
+	if err != nil {
+		t.Fatalf("ReadSection Tool Result: %v", err)
+	}
+	if !containsLine(text2, "### Tool Result") {
+		t.Error("should match ### Tool Result")
+	}
+}
+
 func TestReadSectionNotFound(t *testing.T) {
 	_, err := proc.ReadSection(testDoc, "nonexistent")
 	if err == nil {

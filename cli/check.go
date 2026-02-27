@@ -32,8 +32,8 @@ var checkCmd = &cobra.Command{
 		}
 
 		fmt.Printf("%s: %d files available\n", result.Domain, len(result.Available))
-		for _, p := range result.Available {
-			fmt.Printf("  %s\n", p)
+		for _, f := range result.Available {
+			fmt.Printf("  %-50s  %6d  %s\n", f.Path, f.Size, f.ContentType)
 		}
 		return nil
 	},

@@ -182,13 +182,13 @@ HTTP Response
 |---|---|
 | `trove_discover` | `Discover()` |
 | `trove_scan` | `Init()` + `SyncWithContentTypes()` |
-| `trove_search` | `Search()` (with path boosting, path filter, total_count) |
+| `trove_search` | `Search()` (with path boosting, path filter, pagination: offset/limit/has_more) |
 | `trove_search_full` | `SearchFull()` |
 | `trove_find` | `ListFiles()` filtered by path pattern |
 | `trove_list` | `List()` |
 | `trove_read` | `ReadSection()` |
 | `trove_status` | `Status()` |
-| `trove_diff` | `Diff()` (content-only, metadata filtered) |
+| `trove_diff` | `Diff()` (content-only, metadata filtered, supports `since` duration) |
 | `trove_history` | `History()` |
 | `trove_list_files` | `ListFiles()` (with category filter) |
 | `trove_remove` | `Remove()` |

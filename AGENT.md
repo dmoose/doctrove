@@ -47,10 +47,10 @@ Every mirrored file has a category for task-appropriate filtering:
 | `api-reference` | Looking up function signatures, endpoints, parameters |
 | `tutorial` | Learning how to do something step by step |
 | `guide` | Understanding concepts, architecture, best practices |
-| `spec` | Checking protocol or schema definitions |
+| `spec` | Checking protocol or schema definitions, SEPs/proposals |
 | `changelog` | Finding what changed between versions |
 | `index` | Getting an overview of what a site covers (llms.txt) |
-| `community` | Contributing guidelines, governance, proposals |
+| `community` | Contributing guidelines, governance |
 | `other` | Everything else |
 
 Use the `category` parameter on `trove_search` and `trove_list_files` to filter.
@@ -64,6 +64,8 @@ If you're working on a project and need documentation for a library or service:
 3. If it has content, add it: `trove_scan <url>`
 
 Common sites with good llms.txt coverage: Stripe, Supabase, Cloudflare, Vercel, modelcontextprotocol.io, and many more. Sites without llms.txt may still have useful content discovered via sitemap or seed probing.
+
+If a Context7 API key is configured (`context7_api_key` in `doctrove.yaml`), you can also add bare library names like `react` or `stripe-node` — these resolve to curated, version-aware documentation via the Context7 API.
 
 ## Keeping content fresh
 

@@ -74,7 +74,7 @@ func parseContentTypes(contentTypes string) map[string]bool {
 		return nil
 	}
 	allowed := make(map[string]bool)
-	for _, ct := range strings.Split(contentTypes, ",") {
+	for ct := range strings.SplitSeq(contentTypes, ",") {
 		ct = strings.TrimSpace(ct)
 		if ct != "" {
 			allowed[ct] = true

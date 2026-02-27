@@ -38,6 +38,17 @@ func (e *Engine) Catalog(ctx context.Context) ([]CatalogEntry, error) {
 			entry.Title, entry.Description, entry.Topics = parseLLMSTxt(string(body))
 		}
 
+		// If topics are thin (≤1), try llms-full.txt for richer H2 structure
+		if len(entry.Topics) <= 1 {
+			fullBody, fullErr := e.Store.ReadContent(domain, "/llms-full.txt")
+			if fullErr == nil {
+				_, _, fullTopics := parseLLMSTxt(string(fullBody))
+				if len(fullTopics) > len(entry.Topics) {
+					entry.Topics = fullTopics
+				}
+			}
+		}
+
 		// Always include category distribution — more useful than sparse topics
 		cats, _ := e.Index.CategoryCounts(domain)
 		if len(cats) > 0 {
