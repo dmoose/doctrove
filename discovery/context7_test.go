@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestContext7CanHandle(t *testing.T) {
@@ -171,7 +172,8 @@ func TestContext7APIError(t *testing.T) {
 	}
 }
 
-func TestContext7AcceptedRetry(t *testing.T) {
+func TestContext7RetryThenSucceed(t *testing.T) {
+	attempts := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/libs/search") {
 			resp := struct {
@@ -182,23 +184,102 @@ func TestContext7AcceptedRetry(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(resp)
 			return
 		}
-		// Context endpoint returns 202
+		attempts++
+		if attempts < 3 {
+			w.WriteHeader(http.StatusAccepted)
+			return
+		}
+		_, _ = w.Write([]byte("# X docs\nContent after retry."))
+	}))
+	defer srv.Close()
+
+	p := &Context7Provider{
+		apiKey:       "test-key",
+		baseURL:      srv.URL,
+		client:       srv.Client(),
+		retryBackoff: 10 * time.Millisecond,
+	}
+
+	result, err := p.Discover(context.Background(), "x")
+	if err != nil {
+		t.Fatalf("Discover should succeed after retries: %v", err)
+	}
+	if len(result.Files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(result.Files))
+	}
+	if !strings.Contains(string(result.Files[0].Body), "Content after retry") {
+		t.Error("expected content from successful retry")
+	}
+	if attempts != 3 {
+		t.Errorf("expected 3 attempts, got %d", attempts)
+	}
+}
+
+func TestContext7RetryExhausted(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/libs/search") {
+			resp := struct {
+				Results []c7Library `json:"results"`
+			}{
+				Results: []c7Library{{ID: "/lib/x", Title: "X", TotalSnippets: 10}},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
 		w.WriteHeader(http.StatusAccepted)
 	}))
 	defer srv.Close()
 
 	p := &Context7Provider{
-		apiKey:  "test-key",
-		baseURL: srv.URL,
-		client:  srv.Client(),
+		apiKey:       "test-key",
+		baseURL:      srv.URL,
+		client:       srv.Client(),
+		retryBackoff: 10 * time.Millisecond,
 	}
 
 	_, err := p.Discover(context.Background(), "x")
 	if err == nil {
-		t.Fatal("expected error for 202 Accepted")
+		t.Fatal("expected error when all retries exhausted")
 	}
-	if !strings.Contains(err.Error(), "not ready") {
-		t.Errorf("expected 'not ready' in error, got: %v", err)
+	if !strings.Contains(err.Error(), "202") || !strings.Contains(err.Error(), "3 attempts") {
+		t.Errorf("expected '202 after 3 attempts' in error, got: %v", err)
+	}
+}
+
+func TestContext7Retry429(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/libs/search") {
+			attempts++
+			if attempts < 2 {
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			resp := struct {
+				Results []c7Library `json:"results"`
+			}{
+				Results: []c7Library{{ID: "/lib/x", Title: "X", TotalSnippets: 10}},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+			return
+		}
+		_, _ = w.Write([]byte("# docs"))
+	}))
+	defer srv.Close()
+
+	p := &Context7Provider{
+		apiKey:       "test-key",
+		baseURL:      srv.URL,
+		client:       srv.Client(),
+		retryBackoff: 10 * time.Millisecond,
+	}
+
+	result, err := p.Discover(context.Background(), "x")
+	if err != nil {
+		t.Fatalf("Discover should succeed after 429 retry: %v", err)
+	}
+	if len(result.Files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(result.Files))
 	}
 }
 

@@ -20,9 +20,10 @@ const (
 // Context7Provider discovers LLM-optimized documentation via the Context7 API.
 // It resolves library names to IDs, then fetches curated documentation snippets.
 type Context7Provider struct {
-	apiKey  string
-	baseURL string
-	client  *http.Client
+	apiKey       string
+	baseURL      string
+	client       *http.Client
+	retryBackoff time.Duration // initial backoff between retries (default 2s)
 }
 
 // NewContext7Provider creates a Context7Provider.
@@ -156,9 +157,43 @@ func (p *Context7Provider) getContext(ctx context.Context, libraryID, query stri
 }
 
 func (p *Context7Provider) doGet(ctx context.Context, rawURL string) ([]byte, error) {
+	const maxRetries = 3
+	backoff := p.retryBackoff
+	if backoff == 0 {
+		backoff = 2 * time.Second
+	}
+
+	for attempt := range maxRetries {
+		body, status, err := p.doGetOnce(ctx, rawURL)
+		if err != nil {
+			return nil, err
+		}
+
+		switch {
+		case status == http.StatusOK:
+			return body, nil
+		case status == http.StatusAccepted || status == http.StatusTooManyRequests || status >= 500:
+			// Retryable — wait and try again
+			if attempt == maxRetries-1 {
+				return nil, fmt.Errorf("HTTP %d after %d attempts: %s", status, maxRetries, truncate(string(body), 200))
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+				backoff *= 2
+			}
+		default:
+			return nil, fmt.Errorf("HTTP %d: %s", status, truncate(string(body), 200))
+		}
+	}
+	return nil, fmt.Errorf("unreachable")
+}
+
+func (p *Context7Provider) doGetOnce(ctx context.Context, rawURL string) (body []byte, status int, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if p.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+p.apiKey)
@@ -166,23 +201,15 @@ func (p *Context7Provider) doGet(ctx context.Context, rawURL string) ([]byte, er
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading response: %w", err)
+		return nil, 0, fmt.Errorf("reading response: %w", err)
 	}
-
-	if resp.StatusCode == http.StatusAccepted {
-		return nil, fmt.Errorf("content not ready (202 Accepted) — retry later")
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(body), 200))
-	}
-
-	return body, nil
+	return body, resp.StatusCode, nil
 }
 
 func truncate(s string, max int) string {
