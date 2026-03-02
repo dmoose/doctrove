@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -24,7 +25,7 @@ type Settings struct {
 	MaxProbes      int    `yaml:"max_probes,omitempty"`      // companion probes per llms.txt
 	UserAgent      string `yaml:"user_agent,omitempty"`      // User-Agent header
 	EventsURL      string `yaml:"events_url,omitempty"`      // URL for event relay (e.g. http://localhost:6060/events)
-	Context7APIKey string `yaml:"context7_api_key"` // Context7 API key (starts with ctx7sk)
+	Context7APIKey string `yaml:"context7_api_key"` // Context7 API key (get one at https://context7.com)
 }
 
 // DefaultSettings returns settings with sane defaults.
@@ -36,6 +37,12 @@ func DefaultSettings() *Settings {
 		MaxProbes: 100,
 		UserAgent: "doctrove/0.1",
 	}
+}
+
+// HasContext7Key returns true if a valid Context7 API key is configured.
+// Keys must start with the "ctx7sk" prefix to be considered valid.
+func (s *Settings) HasContext7Key() bool {
+	return strings.HasPrefix(s.Context7APIKey, "ctx7sk")
 }
 
 // TimeoutDuration parses the Timeout string as a time.Duration.

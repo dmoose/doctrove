@@ -95,6 +95,33 @@ func TestContext7KeyAppearsInYAML(t *testing.T) {
 	}
 }
 
+func TestHasContext7Key(t *testing.T) {
+	s := DefaultSettings()
+
+	// Empty key — not valid
+	if s.HasContext7Key() {
+		t.Error("empty key should not be valid")
+	}
+
+	// Placeholder text — not valid
+	s.Context7APIKey = "get one at https://context7.com"
+	if s.HasContext7Key() {
+		t.Error("placeholder text should not be valid")
+	}
+
+	// Random string — not valid
+	s.Context7APIKey = "sk-abc123"
+	if s.HasContext7Key() {
+		t.Error("wrong prefix should not be valid")
+	}
+
+	// Valid key
+	s.Context7APIKey = "ctx7sk-abc123def456"
+	if !s.HasContext7Key() {
+		t.Error("valid ctx7sk- prefixed key should be valid")
+	}
+}
+
 func TestAddSiteDuplicate(t *testing.T) {
 	dir := t.TempDir()
 	cfg, _ := Load(dir)

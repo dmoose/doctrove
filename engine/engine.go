@@ -165,7 +165,7 @@ func New(rootDir string, opts ...Option) (*Engine, error) {
 			}
 		}
 		d := discovery.New(f, rc, cfg.Settings.MaxProbes)
-		if cfg.Settings.Context7APIKey != "" {
+		if cfg.Settings.HasContext7Key() {
 			d.RegisterProvider(discovery.NewContext7Provider(cfg.Settings.Context7APIKey))
 		}
 		disc = d
