@@ -16,6 +16,14 @@ var (
 	jsonOutput    bool
 )
 
+var version = "dev"
+
+// SetVersion sets the version string shown by --version.
+func SetVersion(v string) {
+	version = v
+	rootCmd.Version = v
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "doctrove",
 	Short: "Mirror and track websites' LLM-targeted content",
