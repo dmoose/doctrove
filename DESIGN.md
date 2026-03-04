@@ -2,11 +2,11 @@
 
 A Go tool that discovers, downloads, and maintains local mirrors of websites' LLM-targeted content (llms.txt, companion files, etc.) with git-based change tracking, full-text search, and an MCP interface for agent access.
 
-Also usable as a Go library — all public packages can be imported and components swapped via functional options.
+Also usable as a Go library: all public packages can be imported and components swapped via functional options.
 
 ## Architecture
 
-Three layers — interfaces, core engine, storage — so CLI, MCP, and Go library consumers all share the same logic.
+Three layers (interfaces, core engine, storage) so CLI, MCP, and Go library consumers share the same logic.
 
 ```
 ┌─────────────────────────────────────────────────┐

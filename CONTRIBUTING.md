@@ -1,7 +1,5 @@
 # Contributing to doctrove
 
-Thanks for your interest in contributing! Here's how to get started.
-
 ## Development Setup
 
 ```bash
@@ -33,12 +31,12 @@ make test     # Run tests with race detector
 
 ## Architecture
 
-doctrove is designed as a library-first project. The `engine` package is the primary API surface, with all dependencies injected via functional options. See `DESIGN.md` for the full architecture.
+Library-first: `engine` is the primary API surface with all dependencies injected via functional options. CLI and MCP are thin wrappers. See `DESIGN.md`.
 
 Key conventions:
-- `engine/` orchestrates everything — CLI and MCP are thin wrappers
-- `store/` owns the filesystem layout, git, and SQLite index
-- `discovery/` is provider-based — new content sources implement the `Provider` interface
+- `engine/` orchestrates everything
+- `store/` owns filesystem layout, git, and SQLite index
+- `discovery/` is provider-based; new content sources implement `Provider`
 - `mirror/` handles the fetch-and-store pipeline
 
 ## What to Contribute

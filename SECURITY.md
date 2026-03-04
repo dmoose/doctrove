@@ -20,17 +20,17 @@ doctrove is a local development tool that mirrors publicly available documentati
 
 ## API Keys
 
-- **Context7 API key** (`context7_api_key` in config) — sent as a Bearer token to `context7.com`. Treat like any API credential: don't commit to public repos, don't share in logs.
+- **Context7 API key** (`context7_api_key` in config): sent as a Bearer token to `context7.com`. Don't commit to public repos.
 - No other credentials are stored or transmitted.
 
 ## Network Behavior
 
 doctrove makes outbound HTTP requests to:
 
-1. **Content sources** — websites you explicitly add via `trove_scan` or `doctrove grab`
-2. **Context7 API** — `context7.com/api/v2` (only when a valid API key is configured)
+1. **Content sources**: websites you explicitly add via `trove_scan` or `doctrove grab`
+2. **Context7 API**: `context7.com/api/v2` (only when a valid API key is configured)
 
-It does **not** phone home, send telemetry, or contact any other services. The MCP server communicates only via stdio (no network listener).
+No telemetry, no other outbound connections. The MCP server communicates only via stdio.
 
 ### Rate Limiting
 
@@ -42,18 +42,18 @@ By default, doctrove does **not** check robots.txt because it only fetches conte
 
 ## MCP Server
 
-The MCP server (`doctrove mcp`) runs as a stdio-based child process. It:
+The MCP server (`doctrove mcp`) runs as a stdio child process:
 
-- Has no network listener — communicates only via stdin/stdout
-- Has read/write access to the workspace directory
-- Can make outbound HTTP requests (for discover/sync operations)
-- Cannot execute arbitrary commands
+- No network listener (stdin/stdout only)
+- Read/write access to workspace directory
+- Outbound HTTP for discover/sync operations
+- No arbitrary command execution
 
 ## What NOT to Do
 
-- Do not store API keys or credentials in mirrored content paths
-- Do not point doctrove at internal/private documentation URLs — it mirrors content to disk as plain files
-- Do not share your workspace directory if it contains a Context7 API key in the config
+- Don't store API keys or credentials in mirrored content paths
+- Don't point doctrove at internal/private documentation URLs (it mirrors to disk as plain files)
+- Don't share your workspace directory if it contains a Context7 API key in the config
 
 ## Reporting Vulnerabilities
 

@@ -2,7 +2,7 @@
 
 A local documentation store for AI coding agents.
 
-Many websites now publish LLM-friendly documentation via [`llms.txt`](https://llmstxt.org/) — a proposed standard (like `robots.txt` for crawlers) where sites provide markdown summaries, companion files, and structured content specifically for language models. doctrove discovers, mirrors, and indexes this content so agents have fast, searchable, offline access to documentation — without burning tokens on web fetches or context windows on full pages.
+Mirrors LLM-targeted documentation ([`llms.txt`](https://llmstxt.org/) and companion files) from websites to a local store with full-text search, git change tracking, and an MCP interface for agent access.
 
 ## Install
 
@@ -99,7 +99,7 @@ Example config:
 | `trove_refresh` | Re-sync a tracked site, using ETag caching (honours content_types filter) |
 | `trove_check` | Dry-run: show available content with sizes and content types |
 | `trove_search` | Full-text search with `category`, `path` filters; path-boosted ranking; summaries included |
-| `trove_search_full` | Search and return full content of best match (large — prefer outline+section read) |
+| `trove_search_full` | Search and return full content of best match (large; prefer outline+section read) |
 | `trove_outline` | Get heading structure with `max_depth` (default 3) and `max_sections` (default 100) caps |
 | `trove_read` | Read a file or specific section by heading match (`section` param) |
 | `trove_summarize` | Store an agent-written summary for a file (visible in search results and outlines) |
@@ -127,7 +127,7 @@ trove_read section=X   → read just the section I need
 trove_summarize        → cache a summary so the next agent doesn't re-read
 ```
 
-**Agent feedback loop:** `trove_tag` and `trove_summarize` are persistent — they survive re-syncs and help all future agents. If you read a large file, summarize it. If a category is wrong, fix it. These small investments compound across sessions.
+`trove_tag` and `trove_summarize` persist across re-syncs. If you read a large file, summarize it. If a category is wrong, fix it.
 
 ## Content Discovery
 
@@ -156,10 +156,10 @@ Every indexed file is assigned a semantic category for task-appropriate filterin
 | `legal` | `/privacy`, `/legal/`, `/terms` |
 | `community` | `/community/`, `/contributing` |
 | `context7` | Content fetched via Context7 API |
-| `index` | llms.txt, llms-full.txt, ai.txt — site index files |
+| `index` | llms.txt, llms-full.txt, ai.txt (site index files) |
 | `other` | Unclassified companions, well-known metadata |
 
-Categories are assigned by path heuristics (fast) with body analysis as fallback. Path patterns include `/examples/`, `_tutorial`, `/first_project` for tutorials; `/deploy`, `/sandbox` for guides; `/contributing` for community. Body analysis distinguishes tutorials from API references by prose density between code blocks. Agents can override with `trove_tag` / `doctrove tag`.
+Assigned by path patterns with body analysis as fallback. Override with `trove_tag` / `doctrove tag`.
 
 ```bash
 # Search only API docs
@@ -171,7 +171,7 @@ doctrove tag stripe.com /payments marketing
 
 ## Context7 Integration
 
-Adding a [Context7](https://context7.com) API key enhances doctrove with curated, version-aware documentation for popular libraries. Instead of only discovering content from a site's own `llms.txt`, you can resolve bare library names (e.g. `react`, `stripe-node`, `nextjs`) to high-quality documentation snippets maintained by the Context7 community.
+With a [Context7](https://context7.com) API key, you can resolve bare library names (e.g. `react`, `stripe-node`) to documentation maintained by the Context7 community, in addition to site-sourced llms.txt content.
 
 ```yaml
 settings:
@@ -228,9 +228,9 @@ sites:
 
 ## Storage
 
-Content is stored as plain files under `sites/<domain>/`, tracked by git for change history, with a SQLite FTS5 index for search. The git repo and index are the workspace — share it by cloning.
+Content is stored as plain files under `sites/<domain>/`, tracked by git for change history, with a SQLite FTS5 index for search. The workspace is self-contained; share it by cloning.
 
-When a URL path conflicts with a child path (e.g., `/deploy` exists as a file but `/deploy/getting_started` also needs to be stored), the parent file is automatically promoted to a directory and its content is moved to `_index` inside that directory. Both paths remain readable transparently.
+When a URL path conflicts with a child path (e.g. `/deploy` exists as a file but `/deploy/getting_started` needs to be stored), the parent file is promoted to a directory with its content at `_index`. ReadContent handles this automatically.
 
 ## Event Relay Integration
 

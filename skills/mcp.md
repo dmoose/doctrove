@@ -1,6 +1,6 @@
 # MCP Skills
 
-How to use doctrove's MCP tools effectively as an AI agent.
+MCP tool reference for doctrove.
 
 ## Setup
 
@@ -28,7 +28,7 @@ trove_scan  url="react"
 trove_scan  url="stripe-node"
 ```
 
-This fetches version-aware, community-maintained doc snippets — often higher quality than raw llms.txt content. Results are stored under synthetic domains (e.g. `context7.com~facebook_react`). Get a key at https://context7.com.
+Results are stored under synthetic domains (e.g. `context7.com~facebook_react`). Get a key at https://context7.com.
 
 ## Discovery & Ingestion
 
@@ -48,7 +48,7 @@ Discovers, tracks, and syncs in one step. Use `content_types="llms-txt"` to only
 ```
 trove_refresh  site="stripe.com"
 ```
-Uses ETag caching — only downloads changed files. Honors any content_types filter from the original scan.
+Uses ETag caching; only downloads changed files. Honors the content_types filter from the original scan.
 
 ### Check what's stale
 ```
@@ -62,9 +62,7 @@ Lists sites not synced within the threshold.
 ```
 trove_search  query="authentication"  category="api-reference"  limit=10
 ```
-Returns snippets, categories, and cached summaries. Check summaries before reading full files. Supports FTS5 query syntax. Use `path="/specification/"` to filter by path.
-
-Results include `total_count`, `offset`, `limit`, and `has_more` for pagination. Use `offset` and `limit` to page through large result sets.
+Returns snippets, categories, and cached summaries. Supports FTS5 query syntax. Use `path="/specification/"` to filter by path. Paginated: response includes `total_count`, `offset`, `limit`, `has_more`.
 
 ### Find files by path
 ```
@@ -76,13 +74,13 @@ Case-insensitive path substring matching. Faster than search when you know the p
 ```
 trove_outline  site="stripe.com"  path="/docs/api.md"  max_depth=2
 ```
-Returns heading tree with section sizes. If a summary exists, it's included — check if it answers your question before reading. When `max_depth` filters out deeper headings, a hint shows how many total sections exist. For files with no headings at all, a hint suggests `max_lines` or search instead.
+Returns heading tree with section sizes. Includes cached summary if one exists. When `max_depth` filters sections, a hint shows the total count.
 
 ### Read a specific section
 ```
 trove_read  site="stripe.com"  path="/docs/api.md"  section="Authentication"
 ```
-Case-insensitive heading match. Prefers exact matches and narrower (deeper) headings over broader ones — e.g., `section="Tool"` matches `### Tool` over `# Tools`. Returns content from that heading to the next heading of same/higher level. Use `max_lines=50` to preview.
+Case-insensitive heading match. Prefers exact matches and deeper headings (e.g. `section="Tool"` matches `### Tool` over `# Tools`). Returns content from that heading to the next same/higher-level heading. Use `max_lines=50` to preview.
 
 ### Get full content of best match
 ```
@@ -121,7 +119,7 @@ Total sites, files, disk usage, sync freshness.
 ```
 trove_tag  site="stripe.com"  path="/payments"  category="guide"
 ```
-Persists across re-syncs. Do this when you notice a miscategorized page. Category must be one of: `api-reference`, `tutorial`, `guide`, `spec`, `changelog`, `marketing`, `legal`, `community`, `context7`, `index`, `other`.
+Persists across re-syncs. Valid categories: `api-reference`, `tutorial`, `guide`, `spec`, `changelog`, `marketing`, `legal`, `community`, `context7`, `index`, `other`.
 
 ### Cache a summary
 ```
@@ -143,12 +141,4 @@ trove_diff  since="2h"                    # all changes in the last 2 hours
 trove_diff  since="1d"  stat=true         # last day, compact summary
 trove_diff  stat=true                     # compact file-level summary
 ```
-Shows content-only changes (internal metadata filtered out). Use `stat=true` to get a compact summary of changed files with line counts before requesting the full diff. The `since` parameter accepts durations like `30m`, `2h`, `7d`.
-
-## Tips
-
-- **Start with `trove_catalog`** to see what's available before searching
-- **Check summaries** in search results before reading full files
-- **Use category filters** to narrow results (e.g., `api-reference` for coding, `tutorial` for learning)
-- **Summarize after reading** large files — it pays forward to future agents
-- **Tag miscategorized pages** — a 2-second fix that improves every future search
+Content-only changes (metadata filtered out). `stat=true` gives a compact file-level summary. `since` accepts durations: `30m`, `2h`, `7d`.
