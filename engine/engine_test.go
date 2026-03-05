@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -394,6 +395,90 @@ func TestEngineListFilesAfterPromotion(t *testing.T) {
 	}
 	if text != "# Getting Started" {
 		t.Errorf("getting_started content = %q", text)
+	}
+}
+
+// TestListFilesContentType verifies that ListFiles returns the content_type
+// stored in the index, not the one re-derived from the path. This catches the
+// bug where Context7 content (content_type="context7") was reported as
+// "companion" because ClassifyPath only looks at the filename.
+func TestListFilesContentType(t *testing.T) {
+	dir := t.TempDir()
+	eng, err := New(dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer eng.Close()
+
+	domain := "context7.com~react"
+	eng.Config.AddSite(domain, "react")
+	eng.Store.EnsureSiteDir(domain)
+
+	// Simulate what C7 sync does: write a /docs.md file indexed as "context7"
+	eng.Store.WriteContent(domain, "/docs.md", []byte("# React Docs\nSome content."))
+	eng.Index.IndexFile(domain, "/docs.md", "context7", "# React Docs\nSome content.", "context7")
+
+	entries, err := eng.ListFiles(context.Background(), domain)
+	if err != nil {
+		t.Fatalf("ListFiles: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(entries))
+	}
+	if entries[0].ContentType != "context7" {
+		t.Errorf("ContentType = %q, want %q (should come from index, not ClassifyPath)", entries[0].ContentType, "context7")
+	}
+	if entries[0].Category != "context7" {
+		t.Errorf("Category = %q, want %q", entries[0].Category, "context7")
+	}
+}
+
+// TestSearchPaginationNoSuggestion verifies that paginating past all results
+// does NOT produce a misleading "No local results" suggestion.
+func TestSearchPaginationNoSuggestion(t *testing.T) {
+	dir := t.TempDir()
+	eng, err := New(dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer eng.Close()
+
+	domain := "test.com"
+	eng.Config.AddSite(domain, "https://test.com")
+	eng.Index.IndexFile(domain, "/docs/api.md", "companion", "authentication docs", "api-reference")
+
+	// Search with offset past results
+	sr, err := eng.Search(context.Background(), "authentication", "", "", "", "", 10, 100)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if sr.TotalCount != 1 {
+		t.Errorf("TotalCount = %d, want 1", sr.TotalCount)
+	}
+	if sr.Suggestion != "" {
+		t.Errorf("Suggestion should be empty when results exist but offset is past them, got %q", sr.Suggestion)
+	}
+}
+
+// TestSearchSuggestionForUntrackedSite verifies the suggestion mentions the
+// site is not tracked when filtering to a site that doesn't exist.
+func TestSearchSuggestionForUntrackedSite(t *testing.T) {
+	dir := t.TempDir()
+	eng, err := New(dir)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer eng.Close()
+
+	sr, err := eng.Search(context.Background(), "anything", "untracked.com", "", "", "", 10, 0)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if sr.Suggestion == "" {
+		t.Error("expected suggestion for untracked site")
+	}
+	if !strings.Contains(sr.Suggestion, "not tracked") {
+		t.Errorf("suggestion should mention site is not tracked, got %q", sr.Suggestion)
 	}
 }
 

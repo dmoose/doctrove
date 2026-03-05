@@ -205,7 +205,10 @@ func (e *Engine) ListFiles(ctx context.Context, domain string) ([]FileEntry, err
 		}
 		rel, _ := filepath.Rel(siteDir, path)
 		urlPath := "/" + rel
-		ct := store.ClassifyPath(urlPath)
+		ct, _ := e.Index.GetContentType(domain, urlPath)
+		if ct == "" {
+			ct = store.ClassifyPath(urlPath)
+		}
 		cat, _ := e.Index.GetCategory(domain, urlPath)
 		files = append(files, FileEntry{
 			Path:        urlPath,

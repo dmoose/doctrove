@@ -69,7 +69,7 @@ func (e *Engine) Search(ctx context.Context, query string, site, contentType, ca
 		Limit:      limit,
 		HasMore:    offset+len(hits) < totalCount,
 	}
-	if len(hits) == 0 {
+	if len(hits) == 0 && totalCount == 0 {
 		if site != "" {
 			if _, ok := e.Config.Sites[site]; !ok {
 				result.Suggestion = fmt.Sprintf("Site %q is not tracked. Use trove_scan to add it, or trove_list to see tracked sites.", site)

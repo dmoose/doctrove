@@ -288,3 +288,52 @@ func TestIndexRebuild(t *testing.T) {
 		t.Fatalf("expected 1 hit after rebuild, got %d", len(hits))
 	}
 }
+
+func TestGetContentType(t *testing.T) {
+	dir := t.TempDir()
+	idx, err := OpenIndex(dir)
+	if err != nil {
+		t.Fatalf("OpenIndex: %v", err)
+	}
+	defer idx.Close()
+
+	// Index a file with content_type "context7"
+	idx.IndexFile("example.com", "/docs.md", "context7", "React docs content", "context7")
+
+	ct, err := idx.GetContentType("example.com", "/docs.md")
+	if err != nil {
+		t.Fatalf("GetContentType: %v", err)
+	}
+	if ct != "context7" {
+		t.Errorf("content_type = %q, want %q", ct, "context7")
+	}
+
+	// Non-existent file should return empty string, no error
+	ct, err = idx.GetContentType("example.com", "/nonexistent")
+	if err != nil {
+		t.Fatalf("GetContentType(missing): %v", err)
+	}
+	if ct != "" {
+		t.Errorf("expected empty content_type for missing file, got %q", ct)
+	}
+}
+
+func TestSearchInvalidCategory(t *testing.T) {
+	dir := t.TempDir()
+	idx, err := OpenIndex(dir)
+	if err != nil {
+		t.Fatalf("OpenIndex: %v", err)
+	}
+	defer idx.Close()
+
+	idx.IndexFile("example.com", "/api.md", "companion", "authentication docs", "api-reference")
+
+	// Search with invalid category should return 0 results (filter is a SQL WHERE)
+	hits, err := idx.Search("authentication", SearchOpts{Category: "invalid-category", Limit: 10})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(hits) != 0 {
+		t.Errorf("expected 0 hits with invalid category, got %d", len(hits))
+	}
+}

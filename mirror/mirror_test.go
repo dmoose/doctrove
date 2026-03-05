@@ -28,6 +28,7 @@ func (s *stubIndexer) GetCacheHeaders(domain, path string) (string, string, erro
 func (s *stubIndexer) UpdateCacheHeaders(domain, path, etag, lastModified string) error {
 	return nil
 }
+func (s *stubIndexer) GetContentType(domain, path string) (string, error)           { return "", nil }
 func (s *stubIndexer) GetCategory(domain, path string) (string, error)              { return "", nil }
 func (s *stubIndexer) SetCategory(domain, path, category string) error              { return nil }
 func (s *stubIndexer) GetSummary(domain, path string) (string, string, error)       { return "", "", nil }

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -122,5 +123,62 @@ func TestFilterDiffToContentEmpty(t *testing.T) {
 	filtered := filterDiffToContent("")
 	if filtered != "" {
 		t.Errorf("expected empty output for empty input, got %q", filtered)
+	}
+}
+
+func TestSanitizeError(t *testing.T) {
+	tests := []struct {
+		name     string
+		site     string
+		path     string
+		err      error
+		wantSafe string // substring that MUST appear
+		wantGone string // substring that MUST NOT appear (filesystem path)
+	}{
+		{
+			name:     "file not found strips filesystem path",
+			site:     "example.com",
+			path:     "/docs.md",
+			err:      fmt.Errorf("reading example.com/docs.md: open /home/user/.config/doctrove/sites/example.com/docs.md: no such file or directory"),
+			wantSafe: "file not found: example.com/docs.md",
+			wantGone: "/home/user",
+		},
+		{
+			name:     "section not found passes through",
+			site:     "example.com",
+			path:     "/docs.md",
+			err:      fmt.Errorf("reading example.com/docs.md: section not found: \"API\""),
+			wantSafe: "reading example.com/docs.md",
+			wantGone: "",
+		},
+		{
+			name:     "bare no such file",
+			site:     "example.com",
+			path:     "/missing",
+			err:      fmt.Errorf("open /var/data/sites/example.com/missing: no such file or directory"),
+			wantSafe: "file not found: example.com/missing",
+			wantGone: "/var/data",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeError(tt.site, tt.path, tt.err)
+			if !strings.Contains(got, tt.wantSafe) {
+				t.Errorf("sanitizeError() = %q, want substring %q", got, tt.wantSafe)
+			}
+			if tt.wantGone != "" && strings.Contains(got, tt.wantGone) {
+				t.Errorf("sanitizeError() = %q, should NOT contain %q", got, tt.wantGone)
+			}
+		})
+	}
+}
+
+func TestInvalidCategoryMsg(t *testing.T) {
+	msg := invalidCategoryMsg("bogus")
+	if !strings.Contains(msg, `"bogus"`) {
+		t.Errorf("expected message to contain the invalid category, got %q", msg)
+	}
+	if !strings.Contains(msg, "api-reference") {
+		t.Errorf("expected message to list valid categories, got %q", msg)
 	}
 }

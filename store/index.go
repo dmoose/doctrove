@@ -338,6 +338,19 @@ func (idx *Index) GetCategory(domain, urlPath string) (string, error) {
 	return cat, nil
 }
 
+// GetContentType returns the content type for a specific file from the index.
+func (idx *Index) GetContentType(domain, urlPath string) (string, error) {
+	var ct string
+	err := idx.db.QueryRow(
+		"SELECT content_type FROM content_meta WHERE domain = ? AND path = ?",
+		domain, urlPath,
+	).Scan(&ct)
+	if err != nil {
+		return "", nil
+	}
+	return ct, nil
+}
+
 // SetCategory overrides the category for a specific file (agent feedback).
 // The override is marked as user-set so re-indexing preserves it.
 func (idx *Index) SetCategory(domain, urlPath, category string) error {

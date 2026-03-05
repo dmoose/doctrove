@@ -171,6 +171,10 @@ func searchHandler(e *engine.Engine) ToolHandler {
 			return gomcp.NewToolResultError("query is required"), nil
 		}
 
+		if cat := StringArg(req, "category", ""); cat != "" && !validCategories[cat] {
+			return gomcp.NewToolResultError(invalidCategoryMsg(cat)), nil
+		}
+
 		hits, err := e.Search(ctx, query,
 			StringArg(req, "site", ""),
 			StringArg(req, "content_type", ""),
@@ -215,6 +219,10 @@ func searchFullHandler(e *engine.Engine) ToolHandler {
 			return gomcp.NewToolResultError("query is required"), nil
 		}
 
+		if cat := StringArg(req, "category", ""); cat != "" && !validCategories[cat] {
+			return gomcp.NewToolResultError(invalidCategoryMsg(cat)), nil
+		}
+
 		result, err := e.SearchFull(ctx, query,
 			StringArg(req, "site", ""),
 			StringArg(req, "content_type", ""),
@@ -241,6 +249,9 @@ func listHandler(e *engine.Engine) ToolHandler {
 		sites, err := e.List(ctx)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
+		}
+		if sites == nil {
+			sites = []engine.SiteInfo{}
 		}
 		return JsonResult(sites)
 	}
@@ -538,6 +549,9 @@ func listFilesHandler(e *engine.Engine) ToolHandler {
 
 		// Filter by category if specified
 		catFilter := StringArg(req, "category", "")
+		if catFilter != "" && !validCategories[catFilter] {
+			return gomcp.NewToolResultError(invalidCategoryMsg(catFilter)), nil
+		}
 		if catFilter != "" {
 			var filtered []engine.FileEntry
 			for _, f := range files {
@@ -560,6 +574,9 @@ func listFilesHandler(e *engine.Engine) ToolHandler {
 		}
 		if limit > 0 && limit < len(files) {
 			files = files[:limit]
+		}
+		if files == nil {
+			files = []engine.FileEntry{}
 		}
 
 		return JsonResult(files)
@@ -611,6 +628,9 @@ func catalogHandler(e *engine.Engine) ToolHandler {
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
+		if entries == nil {
+			entries = []engine.CatalogEntry{}
+		}
 		return JsonResult(entries)
 	}
 }
@@ -653,11 +673,19 @@ func tagTool() gomcp.Tool {
 	)
 }
 
-// validCategories is the set of allowed category values for trove_tag.
+// validCategories is the set of allowed category values.
 var validCategories = map[string]bool{
 	"api-reference": true, "tutorial": true, "guide": true, "spec": true,
 	"changelog": true, "marketing": true, "legal": true, "community": true,
 	"context7": true, "index": true, "other": true,
+}
+
+func invalidCategoryMsg(category string) string {
+	valid := make([]string, 0, len(validCategories))
+	for k := range validCategories {
+		valid = append(valid, k)
+	}
+	return fmt.Sprintf("invalid category %q — valid categories: %s", category, strings.Join(valid, ", "))
 }
 
 func tagHandler(e *engine.Engine) ToolHandler {
@@ -670,11 +698,7 @@ func tagHandler(e *engine.Engine) ToolHandler {
 		}
 
 		if !validCategories[category] {
-			valid := make([]string, 0, len(validCategories))
-			for k := range validCategories {
-				valid = append(valid, k)
-			}
-			return gomcp.NewToolResultError(fmt.Sprintf("invalid category %q — valid categories: %s", category, strings.Join(valid, ", "))), nil
+			return gomcp.NewToolResultError(invalidCategoryMsg(category)), nil
 		}
 
 		if err := e.Tag(ctx, site, path, category); err != nil {
@@ -742,19 +766,7 @@ func refreshHandler(e *engine.Engine) ToolHandler {
 			return gomcp.NewToolResultError(err.Error()), nil
 		}
 
-		resp := map[string]any{
-			"domain":    result.Domain,
-			"added":     len(result.Added),
-			"updated":   len(result.Updated),
-			"unchanged": len(result.Unchanged),
-			"skipped":   len(result.Skipped),
-			"sync_time": result.SyncTime,
-		}
-		if len(result.Errors) > 0 {
-			resp["warnings"] = len(result.Errors)
-			resp["warning_details"] = result.Errors
-		}
-		return JsonResult(resp)
+		return scanResult(result)
 	}
 }
 
@@ -792,7 +804,7 @@ func outlineHandler(e *engine.Engine) ToolHandler {
 
 		result, err := e.Outline(ctx, site, path, maxDepth, maxSections)
 		if err != nil {
-			return gomcp.NewToolResultError(err.Error()), nil
+			return gomcp.NewToolResultError(sanitizeError(site, path, err)), nil
 		}
 
 		return JsonResult(result)
