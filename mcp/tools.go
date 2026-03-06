@@ -497,6 +497,9 @@ func historyTool() gomcp.Tool {
 		gomcp.WithNumber("limit",
 			gomcp.Description("Max entries to return (default 20)"),
 		),
+		gomcp.WithString("since",
+			gomcp.Description("Only show entries newer than this duration (e.g. '7d', '24h', '2h')"),
+		),
 	)
 }
 
@@ -504,10 +507,30 @@ func historyHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
 		site := StringArg(req, "site", "")
 		limit := IntArg(req, "limit", 20)
+		since := StringArg(req, "since", "")
 
 		entries, err := e.History(ctx, site, limit)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
+		}
+
+		if since != "" {
+			dur, parseErr := parseDuration(since)
+			if parseErr != nil {
+				return gomcp.NewToolResultError(fmt.Sprintf("invalid since duration %q: %v", since, parseErr)), nil
+			}
+			cutoff := time.Now().Add(-dur)
+			var filtered []engine.ChangeEntry
+			for _, entry := range entries {
+				if entry.When.After(cutoff) {
+					filtered = append(filtered, entry)
+				}
+			}
+			entries = filtered
+		}
+
+		if entries == nil {
+			entries = []engine.ChangeEntry{}
 		}
 
 		return JsonResult(entries)
@@ -564,6 +587,7 @@ func listFilesHandler(e *engine.Engine) ToolHandler {
 
 		offset := IntArg(req, "offset", 0)
 		limit := IntArg(req, "limit", 100)
+		totalCount := len(files)
 
 		if offset > 0 {
 			if offset >= len(files) {
@@ -579,7 +603,19 @@ func listFilesHandler(e *engine.Engine) ToolHandler {
 			files = []engine.FileEntry{}
 		}
 
-		return JsonResult(files)
+		result := map[string]any{
+			"files":       files,
+			"total_count": totalCount,
+			"has_more":    offset+len(files) < totalCount,
+		}
+		if offset > 0 {
+			result["offset"] = offset
+		}
+		if limit > 0 {
+			result["limit"] = limit
+		}
+
+		return JsonResult(result)
 	}
 }
 
@@ -668,7 +704,7 @@ func tagTool() gomcp.Tool {
 		),
 		gomcp.WithString("category",
 			gomcp.Required(),
-			gomcp.Description("New category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, index, other"),
+			gomcp.Description("New category: api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, index, other"),
 		),
 	)
 }
@@ -746,10 +782,9 @@ func checkHandler(e *engine.Engine) ToolHandler {
 
 func refreshTool() gomcp.Tool {
 	return gomcp.NewTool("trove_refresh",
-		gomcp.WithDescription("Re-sync a tracked site to pick up changes — uses cached ETags to skip unchanged files"),
+		gomcp.WithDescription("Re-sync tracked sites to pick up changes — uses cached ETags to skip unchanged files. Omit site to refresh all tracked sites."),
 		gomcp.WithString("site",
-			gomcp.Required(),
-			gomcp.Description("The domain to refresh (e.g. modelcontextprotocol.io)"),
+			gomcp.Description("The domain to refresh (e.g. modelcontextprotocol.io). Omit to refresh all."),
 		),
 	)
 }
@@ -757,8 +792,37 @@ func refreshTool() gomcp.Tool {
 func refreshHandler(e *engine.Engine) ToolHandler {
 	return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
 		site := StringArg(req, "site", "")
+
+		// Refresh all tracked sites if no site specified
 		if site == "" {
-			return gomcp.NewToolResultError("site is required"), nil
+			sites, err := e.List(ctx)
+			if err != nil {
+				return gomcp.NewToolResultError(err.Error()), nil
+			}
+			if len(sites) == 0 {
+				return gomcp.NewToolResultText("No tracked sites to refresh."), nil
+			}
+			var results []map[string]any
+			for _, s := range sites {
+				result, err := e.Refresh(ctx, s.Domain)
+				if err != nil {
+					results = append(results, map[string]any{
+						"domain": s.Domain,
+						"error":  err.Error(),
+					})
+					continue
+				}
+				results = append(results, map[string]any{
+					"domain":    result.Domain,
+					"added":     len(result.Added),
+					"updated":   len(result.Updated),
+					"unchanged": len(result.Unchanged),
+				})
+			}
+			return JsonResult(map[string]any{
+				"refreshed": len(results),
+				"sites":     results,
+			})
 		}
 
 		result, err := e.Refresh(ctx, site)
@@ -874,6 +938,9 @@ func staleHandler(e *engine.Engine) ToolHandler {
 		sites, err := e.Stale(ctx, threshold)
 		if err != nil {
 			return gomcp.NewToolResultError(err.Error()), nil
+		}
+		if sites == nil {
+			sites = []engine.SiteStats{}
 		}
 
 		return JsonResult(map[string]any{

@@ -62,6 +62,9 @@ func (e *Engine) Search(ctx context.Context, query string, site, contentType, ca
 		}
 	}
 
+	if hits == nil {
+		hits = []SearchHit{}
+	}
 	result := &SearchResult{
 		Hits:       hits,
 		TotalCount: totalCount,

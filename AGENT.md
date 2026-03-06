@@ -45,6 +45,9 @@ Every mirrored file has a category for task-appropriate filtering:
 | `guide` | Concepts, architecture, best practices |
 | `spec` | Checking protocol or schema definitions, SEPs/proposals |
 | `changelog` | Version history |
+| `marketing` | Pricing, use cases, customer stories |
+| `legal` | Privacy policies, terms, restricted businesses |
+| `context7` | Content fetched via Context7 API |
 | `index` | Site overview (llms.txt) |
 | `community` | Contributing, governance |
 | `other` | Everything else |

@@ -18,7 +18,7 @@ Initial public release.
 - **HTML-to-markdown conversion** for sites serving HTML at LLM content URLs, with JS-heavy SPA detection and MDX/JSX artifact cleanup
 - **SQLite FTS5 full-text search** with path boosting, category filtering, pagination (offset/limit/has_more), and total count
 - **Git-based change tracking**: every sync is committed, with history and diff tools including time-based ranges (`since` parameter)
-- **Page categorization**: 10 semantic categories (api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, index) assigned by path heuristics and body analysis
+- **Page categorization**: 11 semantic categories (api-reference, tutorial, guide, spec, changelog, marketing, legal, community, context7, index, other) assigned by path heuristics and body analysis
 - **Agent feedback loop**: trove_tag for persistent category overrides, trove_summarize for cached summaries searchable via FTS
 - **ETag caching**: conditional fetch on refresh to skip unchanged files
 - **Path collision resolution**: automatic file-to-directory promotion when parent/child URL paths conflict (e.g. `/deploy` and `/deploy/getting_started`)
