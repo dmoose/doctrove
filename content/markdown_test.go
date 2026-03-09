@@ -210,11 +210,7 @@ func containsLine(text, substr string) bool {
 }
 
 func splitLines(s string) []string {
-	lines := []string{}
-	for _, l := range split(s) {
-		lines = append(lines, l)
-	}
-	return lines
+	return append([]string{}, split(s)...)
 }
 
 func split(s string) []string {

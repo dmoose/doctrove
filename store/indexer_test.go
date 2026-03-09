@@ -64,7 +64,7 @@ func TestIndexSetCategoryMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenIndex: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	// SetCategory on a file that doesn't exist should error
 	err = idx.SetCategory("nosuch.com", "/missing", "guide")
@@ -82,10 +82,12 @@ func TestIndexSetCategoryPersists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenIndex: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	// Index a file with auto category
-	idx.IndexFile("example.com", "/docs/api.md", "companion", "# API\nEndpoint docs", "api-reference")
+	if err := idx.IndexFile("example.com", "/docs/api.md", "companion", "# API\nEndpoint docs", "api-reference"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Override category
 	if err := idx.SetCategory("example.com", "/docs/api.md", "tutorial"); err != nil {
@@ -97,7 +99,9 @@ func TestIndexSetCategoryPersists(t *testing.T) {
 	}
 
 	// Re-index should preserve user override (user_category=1)
-	idx.IndexFile("example.com", "/docs/api.md", "companion", "# API\nEndpoint docs updated", "api-reference")
+	if err := idx.IndexFile("example.com", "/docs/api.md", "companion", "# API\nEndpoint docs updated", "api-reference"); err != nil {
+		t.Fatal(err)
+	}
 	cat, _ = idx.GetCategory("example.com", "/docs/api.md")
 	if cat != "tutorial" {
 		t.Errorf("category after re-index = %q, want tutorial (user override should persist)", cat)
@@ -110,7 +114,7 @@ func TestIndexSetSummaryMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenIndex: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	err = idx.SetSummary("nosuch.com", "/missing", "a summary")
 	if err == nil {
@@ -124,10 +128,14 @@ func TestIndexSetSummarySearchable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenIndex: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
-	idx.IndexFile("example.com", "/docs/api.md", "companion", "# API Reference\nBasic endpoint info.")
-	idx.SetSummary("example.com", "/docs/api.md", "Covers webhook verification and payment intents.")
+	if err := idx.IndexFile("example.com", "/docs/api.md", "companion", "# API Reference\nBasic endpoint info."); err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.SetSummary("example.com", "/docs/api.md", "Covers webhook verification and payment intents."); err != nil {
+		t.Fatal(err)
+	}
 
 	// The summary should be searchable via FTS
 	hits, err := idx.Search("webhook verification", SearchOpts{Limit: 10})
@@ -148,12 +156,20 @@ func TestIndexCategoryCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenIndex: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
-	idx.IndexFile("example.com", "/api.md", "companion", "api content", "api-reference")
-	idx.IndexFile("example.com", "/guide.md", "companion", "guide content", "guide")
-	idx.IndexFile("example.com", "/tutorial.md", "companion", "tutorial content", "tutorial")
-	idx.IndexFile("example.com", "/api2.md", "companion", "more api", "api-reference")
+	if err := idx.IndexFile("example.com", "/api.md", "companion", "api content", "api-reference"); err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.IndexFile("example.com", "/guide.md", "companion", "guide content", "guide"); err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.IndexFile("example.com", "/tutorial.md", "companion", "tutorial content", "tutorial"); err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.IndexFile("example.com", "/api2.md", "companion", "more api", "api-reference"); err != nil {
+		t.Fatal(err)
+	}
 
 	counts, err := idx.CategoryCounts("example.com")
 	if err != nil {
@@ -176,7 +192,7 @@ func TestIndexCacheHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenIndex: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	// Before indexing, cache headers should return empty without error
 	etag, lm, err := idx.GetCacheHeaders("example.com", "/docs.md")
@@ -188,7 +204,9 @@ func TestIndexCacheHeaders(t *testing.T) {
 	}
 
 	// Index a file, then set cache headers
-	idx.IndexFile("example.com", "/docs.md", "companion", "content", "other")
+	if err := idx.IndexFile("example.com", "/docs.md", "companion", "content", "other"); err != nil {
+		t.Fatal(err)
+	}
 	if err := idx.UpdateCacheHeaders("example.com", "/docs.md", "etag123", "Mon, 01 Jan 2024"); err != nil {
 		t.Fatalf("UpdateCacheHeaders: %v", err)
 	}
@@ -208,10 +226,14 @@ func TestIndexSearchCategoryFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenIndex: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
-	idx.IndexFile("example.com", "/api.md", "companion", "authentication docs for API", "api-reference")
-	idx.IndexFile("example.com", "/tutorial.md", "companion", "authentication tutorial step by step", "tutorial")
+	if err := idx.IndexFile("example.com", "/api.md", "companion", "authentication docs for API", "api-reference"); err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.IndexFile("example.com", "/tutorial.md", "companion", "authentication tutorial step by step", "tutorial"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Search with category filter
 	hits, _ := idx.Search("authentication", SearchOpts{Category: "tutorial", Limit: 10})
@@ -295,10 +317,12 @@ func TestGetContentType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenIndex: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
 	// Index a file with content_type "context7"
-	idx.IndexFile("example.com", "/docs.md", "context7", "React docs content", "context7")
+	if err := idx.IndexFile("example.com", "/docs.md", "context7", "React docs content", "context7"); err != nil {
+		t.Fatal(err)
+	}
 
 	ct, err := idx.GetContentType("example.com", "/docs.md")
 	if err != nil {
@@ -324,9 +348,11 @@ func TestSearchInvalidCategory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenIndex: %v", err)
 	}
-	defer idx.Close()
+	defer func() { _ = idx.Close() }()
 
-	idx.IndexFile("example.com", "/api.md", "companion", "authentication docs", "api-reference")
+	if err := idx.IndexFile("example.com", "/api.md", "companion", "authentication docs", "api-reference"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Search with invalid category should return 0 results (filter is a SQL WHERE)
 	hits, err := idx.Search("authentication", SearchOpts{Category: "invalid-category", Limit: 10})

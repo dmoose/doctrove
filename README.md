@@ -1,5 +1,11 @@
 # doctrove
 
+[![CI](https://github.com/dmoose/doctrove/actions/workflows/ci.yml/badge.svg)](https://github.com/dmoose/doctrove/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/dmoose/doctrove?sort=semver)](https://github.com/dmoose/doctrove/releases)
+[![Go Reference](https://pkg.go.dev/badge/github.com/dmoose/doctrove.svg)](https://pkg.go.dev/github.com/dmoose/doctrove)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dmoose/doctrove)](https://goreportcard.com/report/github.com/dmoose/doctrove)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A local documentation store for AI coding agents.
 
 Mirrors LLM-targeted documentation ([`llms.txt`](https://llmstxt.org/) and companion files) from websites to a local store with full-text search, git change tracking, and an MCP interface for agent access.
@@ -204,7 +210,7 @@ settings:
   rate_burst: 5            # burst capacity
   timeout: 30s             # HTTP timeout
   max_probes: 100          # companion probes per llms.txt
-  user_agent: "doctrove/0.1"
+  user_agent: "doctrove/1.0"
   events_url: http://localhost:6060/events    # optional eventrelay integration
   context7_api_key: ctx7sk-...                # optional Context7 API key
 

@@ -13,19 +13,19 @@ import (
 const DefaultConfigFile = "doctrove.yaml"
 
 type Config struct {
-	Settings *Settings               `yaml:"settings,omitempty"`
-	Sites    map[string]*SiteConfig  `yaml:"sites"`
+	Settings *Settings              `yaml:"settings,omitempty"`
+	Sites    map[string]*SiteConfig `yaml:"sites"`
 	path     string
 }
 
 type Settings struct {
-	RateLimit      int    `yaml:"rate_limit,omitempty"`      // requests/sec per host
-	RateBurst      int    `yaml:"rate_burst,omitempty"`      // burst capacity
-	Timeout        string `yaml:"timeout,omitempty"`         // HTTP timeout (e.g. "30s")
-	MaxProbes      int    `yaml:"max_probes,omitempty"`      // companion probes per llms.txt
-	UserAgent      string `yaml:"user_agent,omitempty"`      // User-Agent header
-	EventsURL      string `yaml:"events_url,omitempty"`      // URL for event relay (e.g. http://localhost:6060/events)
-	Context7APIKey string `yaml:"context7_api_key"` // Context7 API key (get one at https://context7.com)
+	RateLimit      int    `yaml:"rate_limit,omitempty"` // requests/sec per host
+	RateBurst      int    `yaml:"rate_burst,omitempty"` // burst capacity
+	Timeout        string `yaml:"timeout,omitempty"`    // HTTP timeout (e.g. "30s")
+	MaxProbes      int    `yaml:"max_probes,omitempty"` // companion probes per llms.txt
+	UserAgent      string `yaml:"user_agent,omitempty"` // User-Agent header
+	EventsURL      string `yaml:"events_url,omitempty"` // URL for event relay (e.g. http://localhost:6060/events)
+	Context7APIKey string `yaml:"context7_api_key"`     // Context7 API key (get one at https://context7.com)
 }
 
 // DefaultSettings returns settings with sane defaults.
@@ -35,7 +35,7 @@ func DefaultSettings() *Settings {
 		RateBurst: 5,
 		Timeout:   "30s",
 		MaxProbes: 100,
-		UserAgent: "doctrove/0.1",
+		UserAgent: "doctrove/1.0",
 	}
 }
 

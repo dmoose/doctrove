@@ -133,7 +133,7 @@ func (m *Mirror) Sync(ctx context.Context, result *discovery.Result, filter Filt
 		} else {
 			// Try conditional fetch if we have cached headers
 			var (
-				resp    *fetcher.Response
+				resp     *fetcher.Response
 				fetchErr error
 			)
 			etag, lastMod, _ := m.Index.GetCacheHeaders(result.Domain, file.Path)

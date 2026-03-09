@@ -9,8 +9,8 @@ import (
 )
 
 type sitemapIndex struct {
-	XMLName  xml.Name    `xml:"urlset"`
-	URLs     []sitemapURL `xml:"url"`
+	XMLName xml.Name     `xml:"urlset"`
+	URLs    []sitemapURL `xml:"url"`
 }
 
 type sitemapURL struct {

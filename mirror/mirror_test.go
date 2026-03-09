@@ -20,21 +20,21 @@ func (s *stubIndexer) IndexFile(domain, path, contentType, body string, category
 func (s *stubIndexer) Search(query string, opts store.SearchOpts) ([]store.SearchHit, error) {
 	return nil, nil
 }
-func (s *stubIndexer) DeleteSite(domain string) error                         { return nil }
-func (s *stubIndexer) Rebuild(st *store.Store) error                          { return nil }
+func (s *stubIndexer) DeleteSite(domain string) error { return nil }
+func (s *stubIndexer) Rebuild(st *store.Store) error  { return nil }
 func (s *stubIndexer) GetCacheHeaders(domain, path string) (string, string, error) {
 	return "", "", nil
 }
 func (s *stubIndexer) UpdateCacheHeaders(domain, path, etag, lastModified string) error {
 	return nil
 }
-func (s *stubIndexer) GetContentType(domain, path string) (string, error)           { return "", nil }
-func (s *stubIndexer) GetCategory(domain, path string) (string, error)              { return "", nil }
-func (s *stubIndexer) SetCategory(domain, path, category string) error              { return nil }
-func (s *stubIndexer) GetSummary(domain, path string) (string, string, error)       { return "", "", nil }
-func (s *stubIndexer) SetSummary(domain, path, summary string) error                { return nil }
-func (s *stubIndexer) CategoryCounts(domain string) (map[string]int, error)         { return nil, nil }
-func (s *stubIndexer) Close() error                                                 { return nil }
+func (s *stubIndexer) GetContentType(domain, path string) (string, error)     { return "", nil }
+func (s *stubIndexer) GetCategory(domain, path string) (string, error)        { return "", nil }
+func (s *stubIndexer) SetCategory(domain, path, category string) error        { return nil }
+func (s *stubIndexer) GetSummary(domain, path string) (string, string, error) { return "", "", nil }
+func (s *stubIndexer) SetSummary(domain, path, summary string) error          { return nil }
+func (s *stubIndexer) CategoryCounts(domain string) (map[string]int, error)   { return nil, nil }
+func (s *stubIndexer) Close() error                                           { return nil }
 
 func TestSyncWithBody(t *testing.T) {
 	dir := t.TempDir()

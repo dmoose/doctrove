@@ -21,8 +21,8 @@ func TestDefaultSettings(t *testing.T) {
 	if s.MaxProbes != 100 {
 		t.Errorf("MaxProbes = %d, want 100", s.MaxProbes)
 	}
-	if s.UserAgent != "doctrove/0.1" {
-		t.Errorf("UserAgent = %q, want doctrove/0.1", s.UserAgent)
+	if s.UserAgent != "doctrove/1.0" {
+		t.Errorf("UserAgent = %q, want doctrove/1.0", s.UserAgent)
 	}
 }
 
@@ -60,7 +60,9 @@ func TestLoadMissing(t *testing.T) {
 func TestSaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
 	cfg, _ := Load(dir)
-	cfg.AddSite("example.com", "https://example.com")
+	if err := cfg.AddSite("example.com", "https://example.com"); err != nil {
+		t.Fatal(err)
+	}
 	cfg.Settings.Context7APIKey = "ctx7sk-test123"
 	if err := cfg.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -136,7 +138,9 @@ func TestAddSiteDuplicate(t *testing.T) {
 func TestRemoveSite(t *testing.T) {
 	dir := t.TempDir()
 	cfg, _ := Load(dir)
-	cfg.AddSite("example.com", "https://example.com")
+	if err := cfg.AddSite("example.com", "https://example.com"); err != nil {
+		t.Fatal(err)
+	}
 	if err := cfg.RemoveSite("example.com"); err != nil {
 		t.Fatalf("RemoveSite: %v", err)
 	}
@@ -157,7 +161,9 @@ func TestMergeSettingsPartial(t *testing.T) {
 	dir := t.TempDir()
 	// Write partial config — only set rate_limit
 	yaml := "settings:\n  rate_limit: 10\n"
-	os.WriteFile(filepath.Join(dir, DefaultConfigFile), []byte(yaml), 0644)
+	if err := os.WriteFile(filepath.Join(dir, DefaultConfigFile), []byte(yaml), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := Load(dir)
 	if err != nil {
@@ -177,7 +183,9 @@ func TestMergeSettingsPartial(t *testing.T) {
 func TestUpdateLastSync(t *testing.T) {
 	dir := t.TempDir()
 	cfg, _ := Load(dir)
-	cfg.AddSite("example.com", "https://example.com")
+	if err := cfg.AddSite("example.com", "https://example.com"); err != nil {
+		t.Fatal(err)
+	}
 
 	now := cfg.Sites["example.com"].LastSync
 	if !now.IsZero() {
@@ -190,7 +198,9 @@ func TestUpdateLastSync(t *testing.T) {
 func TestSetContentTypes(t *testing.T) {
 	dir := t.TempDir()
 	cfg, _ := Load(dir)
-	cfg.AddSite("example.com", "https://example.com")
+	if err := cfg.AddSite("example.com", "https://example.com"); err != nil {
+		t.Fatal(err)
+	}
 	cfg.SetContentTypes("example.com", "llms-txt,llms-full-txt")
 	if cfg.Sites["example.com"].ContentTypes != "llms-txt,llms-full-txt" {
 		t.Errorf("ContentTypes = %q", cfg.Sites["example.com"].ContentTypes)

@@ -137,7 +137,7 @@ settings:
   rate_burst: 5            # burst capacity
   timeout: 30s
   max_probes: 100          # companion probes per llms.txt
-  user_agent: "doctrove/0.1"
+  user_agent: "doctrove/1.0"
   context7_api_key: ""     # optional Context7 API key
 
 sites:

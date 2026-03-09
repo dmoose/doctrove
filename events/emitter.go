@@ -11,13 +11,13 @@ import (
 // Event is the structured payload sent to the event relay.
 type Event struct {
 	Source     string         `json:"source"`
-	Channel   string         `json:"channel,omitempty"`
-	Action    string         `json:"action"`
-	Level     string         `json:"level,omitempty"`
-	AgentID   string         `json:"agent_id,omitempty"`
-	DurationMS int64         `json:"duration_ms"`
-	Data      map[string]any `json:"data,omitempty"`
-	TS        time.Time      `json:"ts"`
+	Channel    string         `json:"channel,omitempty"`
+	Action     string         `json:"action"`
+	Level      string         `json:"level,omitempty"`
+	AgentID    string         `json:"agent_id,omitempty"`
+	DurationMS int64          `json:"duration_ms"`
+	Data       map[string]any `json:"data,omitempty"`
+	TS         time.Time      `json:"ts"`
 }
 
 // Emitter sends events to an event relay service.

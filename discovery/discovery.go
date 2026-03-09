@@ -26,11 +26,11 @@ const (
 // DiscoveredFile represents a single piece of discovered LLM content.
 type DiscoveredFile struct {
 	URL         string      `json:"url"`
-	Path        string      `json:"path"`         // URL path (e.g., "/llms.txt")
+	Path        string      `json:"path"` // URL path (e.g., "/llms.txt")
 	ContentType ContentType `json:"content_type"`
 	Size        int         `json:"size"`
-	FoundVia    string      `json:"found_via"`    // How it was discovered
-	Body        []byte      `json:"-"`            // If non-nil, content is already fetched (skip mirror fetch)
+	FoundVia    string      `json:"found_via"` // How it was discovered
+	Body        []byte      `json:"-"`         // If non-nil, content is already fetched (skip mirror fetch)
 }
 
 // Result holds everything discovered for a site.

@@ -126,11 +126,12 @@ func (m *MarkdownProcessor) ReadSection(text, sectionName string) (string, error
 	bestScore := -1 // higher is better
 	for i, h := range headings {
 		score := 0
-		if h.lower == sectionLower {
+		switch {
+		case h.lower == sectionLower:
 			score = 1000 + h.level // exact match, prefer deeper
-		} else if strings.Contains(h.lower, sectionLower) {
+		case strings.Contains(h.lower, sectionLower):
 			score = h.level // substring match, prefer deeper (narrower)
-		} else {
+		default:
 			continue
 		}
 		if score > bestScore {

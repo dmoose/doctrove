@@ -176,14 +176,20 @@ func TestOutlineHintWithMaxDepth(t *testing.T) {
 
 	// Create a file with headings at multiple depths
 	domain := "test.com"
-	eng.Config.AddSite(domain, "https://test.com")
-	eng.Store.EnsureSiteDir(domain)
+	if err := eng.Config.AddSite(domain, "https://test.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := eng.Store.EnsureSiteDir(domain); err != nil {
+		t.Fatal(err)
+	}
 	content := "# Title\n\n## Section A\n\nText.\n\n### Subsection A1\n\nMore text.\n\n## Section B\n\nText.\n\n### Subsection B1\n\nText.\n\n### Subsection B2\n\nText.\n\n"
 	// Pad to >5000 chars to trigger hint logic
 	for len(content) < 6000 {
 		content += "Some padding text to make the file large enough for hint logic.\n"
 	}
-	eng.Store.WriteContent(domain, "/docs/big.md", []byte(content))
+	if _, err := eng.Store.WriteContent(domain, "/docs/big.md", []byte(content)); err != nil {
+		t.Fatal(err)
+	}
 
 	// With maxDepth=0 (all levels), should have multiple sections, no misleading hint
 	out, err := eng.Outline(context.Background(), domain, "/docs/big.md", 0, 0)
@@ -223,11 +229,15 @@ func TestEngineListFilesWithIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	domain := "test.com"
-	eng.Config.AddSite(domain, "https://test.com")
-	eng.Store.EnsureSiteDir(domain)
+	if err := eng.Config.AddSite(domain, "https://test.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := eng.Store.EnsureSiteDir(domain); err != nil {
+		t.Fatal(err)
+	}
 
 	// Write files and index them (simulating what sync does)
 	files := []struct {
@@ -238,8 +248,12 @@ func TestEngineListFilesWithIndex(t *testing.T) {
 		{"/deploy", "# Deploy Guide\nHow to deploy.\n", "guide"},
 	}
 	for _, f := range files {
-		eng.Store.WriteContent(domain, f.path, []byte(f.body))
-		eng.Index.IndexFile(domain, f.path, "companion", f.body, f.cat)
+		if _, err := eng.Store.WriteContent(domain, f.path, []byte(f.body)); err != nil {
+			t.Fatal(err)
+		}
+		if err := eng.Index.IndexFile(domain, f.path, "companion", f.body, f.cat); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// ListFiles should return all 3 with correct categories
@@ -280,14 +294,20 @@ func TestEngineTagMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	domain := "test.com"
-	eng.Config.AddSite(domain, "https://test.com")
-	eng.Store.EnsureSiteDir(domain)
+	if err := eng.Config.AddSite(domain, "https://test.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := eng.Store.EnsureSiteDir(domain); err != nil {
+		t.Fatal(err)
+	}
 
 	// Write file to disk but DON'T index it — simulates the bug
-	eng.Store.WriteContent(domain, "/deploy", []byte("# Deploy"))
+	if _, err := eng.Store.WriteContent(domain, "/deploy", []byte("# Deploy")); err != nil {
+		t.Fatal(err)
+	}
 
 	// Tag should fail with clear error
 	err = eng.Tag(context.Background(), domain, "/deploy", "guide")
@@ -303,15 +323,19 @@ func TestEngineSearchPagination(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	domain := "test.com"
-	eng.Config.AddSite(domain, "https://test.com")
+	if err := eng.Config.AddSite(domain, "https://test.com"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Index several files all matching "authentication"
 	for i := range 5 {
 		path := "/docs/" + string(rune('a'+i)) + ".md"
-		eng.Index.IndexFile(domain, path, "companion", "authentication docs page", "api-reference")
+		if err := eng.Index.IndexFile(domain, path, "companion", "authentication docs page", "api-reference"); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Search with limit=2
@@ -362,15 +386,23 @@ func TestEngineListFilesAfterPromotion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	domain := "test.com"
-	eng.Config.AddSite(domain, "https://test.com")
-	eng.Store.EnsureSiteDir(domain)
+	if err := eng.Config.AddSite(domain, "https://test.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := eng.Store.EnsureSiteDir(domain); err != nil {
+		t.Fatal(err)
+	}
 
 	// Simulate the deno.com scenario
-	eng.Store.WriteContent(domain, "/deploy", []byte("# Deploy"))
-	eng.Store.WriteContent(domain, "/deploy/getting_started", []byte("# Getting Started"))
+	if _, err := eng.Store.WriteContent(domain, "/deploy", []byte("# Deploy")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := eng.Store.WriteContent(domain, "/deploy/getting_started", []byte("# Getting Started")); err != nil {
+		t.Fatal(err)
+	}
 
 	entries, err := eng.ListFiles(context.Background(), domain)
 	if err != nil {
@@ -408,15 +440,23 @@ func TestListFilesContentType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	domain := "context7.com~react"
-	eng.Config.AddSite(domain, "react")
-	eng.Store.EnsureSiteDir(domain)
+	if err := eng.Config.AddSite(domain, "react"); err != nil {
+		t.Fatal(err)
+	}
+	if err := eng.Store.EnsureSiteDir(domain); err != nil {
+		t.Fatal(err)
+	}
 
 	// Simulate what C7 sync does: write a /docs.md file indexed as "context7"
-	eng.Store.WriteContent(domain, "/docs.md", []byte("# React Docs\nSome content."))
-	eng.Index.IndexFile(domain, "/docs.md", "context7", "# React Docs\nSome content.", "context7")
+	if _, err := eng.Store.WriteContent(domain, "/docs.md", []byte("# React Docs\nSome content.")); err != nil {
+		t.Fatal(err)
+	}
+	if err := eng.Index.IndexFile(domain, "/docs.md", "context7", "# React Docs\nSome content.", "context7"); err != nil {
+		t.Fatal(err)
+	}
 
 	entries, err := eng.ListFiles(context.Background(), domain)
 	if err != nil {
@@ -441,11 +481,15 @@ func TestSearchPaginationNoSuggestion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	domain := "test.com"
-	eng.Config.AddSite(domain, "https://test.com")
-	eng.Index.IndexFile(domain, "/docs/api.md", "companion", "authentication docs", "api-reference")
+	if err := eng.Config.AddSite(domain, "https://test.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := eng.Index.IndexFile(domain, "/docs/api.md", "companion", "authentication docs", "api-reference"); err != nil {
+		t.Fatal(err)
+	}
 
 	// Search with offset past results
 	sr, err := eng.Search(context.Background(), "authentication", "", "", "", "", 10, 100)
@@ -468,7 +512,7 @@ func TestSearchSuggestionForUntrackedSite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	sr, err := eng.Search(context.Background(), "anything", "untracked.com", "", "", "", 10, 0)
 	if err != nil {

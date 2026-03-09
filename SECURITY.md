@@ -34,7 +34,7 @@ No telemetry, no other outbound connections. The MCP server communicates only vi
 
 ### Rate Limiting
 
-All outbound requests are rate-limited per host (default: 2 req/sec, burst 5). This is configurable in `doctrove.yaml`. The User-Agent header identifies the tool as `doctrove/0.1`.
+All outbound requests are rate-limited per host (default: 2 req/sec, burst 5). This is configurable in `doctrove.yaml`. The User-Agent header identifies the tool as `doctrove/1.0`.
 
 ### robots.txt
 

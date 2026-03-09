@@ -188,8 +188,12 @@ func TestSiteFileCountAfterPromotion(t *testing.T) {
 		t.Fatalf("EnsureSiteDir: %v", err)
 	}
 
-	s.WriteContent("example.com", "/deploy", []byte("page"))
-	s.WriteContent("example.com", "/deploy/child", []byte("child"))
+	if _, err := s.WriteContent("example.com", "/deploy", []byte("page")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.WriteContent("example.com", "/deploy/child", []byte("child")); err != nil {
+		t.Fatal(err)
+	}
 
 	count, err := s.SiteFileCount("example.com")
 	if err != nil {

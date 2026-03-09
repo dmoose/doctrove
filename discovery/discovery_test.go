@@ -14,8 +14,8 @@ type stubProvider struct {
 	err       error
 }
 
-func (s *stubProvider) Name() string                                          { return s.name }
-func (s *stubProvider) CanHandle(input string) bool                           { return s.canHandle }
+func (s *stubProvider) Name() string                { return s.name }
+func (s *stubProvider) CanHandle(input string) bool { return s.canHandle }
 func (s *stubProvider) Discover(ctx context.Context, input string) (*Result, error) {
 	return s.result, s.err
 }

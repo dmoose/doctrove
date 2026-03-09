@@ -8,9 +8,9 @@ import (
 
 // Platform identifies a documentation site's framework/theme.
 type Platform struct {
-	Theme            string   `json:"theme"`              // mkdocs-material, docusaurus, sphinx, generic
-	ContentSelectors []string `json:"content_selectors"`  // CSS selectors for main content
-	RemoveSelectors  []string `json:"remove_selectors"`   // CSS selectors for chrome to strip
+	Theme            string   `json:"theme"`             // mkdocs-material, docusaurus, sphinx, generic
+	ContentSelectors []string `json:"content_selectors"` // CSS selectors for main content
+	RemoveSelectors  []string `json:"remove_selectors"`  // CSS selectors for chrome to strip
 }
 
 // DetectPlatform inspects HTML to identify the documentation platform and

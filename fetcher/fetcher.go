@@ -15,11 +15,11 @@ import (
 
 // Fetcher handles all HTTP requests with per-domain rate limiting.
 type Fetcher struct {
-	client      *http.Client
-	limiters    map[string]*rate.Limiter
-	mu          sync.Mutex
-	userAgent   string
-	ratePerHost int
+	client       *http.Client
+	limiters     map[string]*rate.Limiter
+	mu           sync.Mutex
+	userAgent    string
+	ratePerHost  int
 	burstPerHost int
 }
 
@@ -35,16 +35,16 @@ type Response struct {
 
 // Options configures the Fetcher.
 type Options struct {
-	UserAgent   string
-	RatePerHost int
+	UserAgent    string
+	RatePerHost  int
 	BurstPerHost int
-	Timeout     time.Duration
+	Timeout      time.Duration
 }
 
 // New creates a Fetcher with the given options.
 func New(opts Options) *Fetcher {
 	if opts.UserAgent == "" {
-		opts.UserAgent = "doctrove/0.1"
+		opts.UserAgent = "doctrove/1.0"
 	}
 	if opts.RatePerHost <= 0 {
 		opts.RatePerHost = 2
@@ -59,9 +59,9 @@ func New(opts Options) *Fetcher {
 		client: &http.Client{
 			Timeout: opts.Timeout,
 		},
-		limiters:    make(map[string]*rate.Limiter),
-		userAgent:   opts.UserAgent,
-		ratePerHost: opts.RatePerHost,
+		limiters:     make(map[string]*rate.Limiter),
+		userAgent:    opts.UserAgent,
+		ratePerHost:  opts.RatePerHost,
 		burstPerHost: opts.BurstPerHost,
 	}
 }

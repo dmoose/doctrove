@@ -8,8 +8,8 @@ import (
 	"github.com/dmoose/doctrove/discovery"
 	"github.com/dmoose/doctrove/events"
 	"github.com/dmoose/doctrove/fetcher"
-	"github.com/dmoose/doctrove/mirror"
 	"github.com/dmoose/doctrove/internal/robots"
+	"github.com/dmoose/doctrove/mirror"
 	"github.com/dmoose/doctrove/store"
 )
 
@@ -118,7 +118,7 @@ func New(rootDir string, opts ...Option) (*Engine, error) {
 	s := store.New(rootDir)
 
 	// Git
-	var git store.VersionStore = o.git
+	git := o.git
 	if git == nil {
 		gs, err := store.InitGit(rootDir)
 		if err != nil {
@@ -128,7 +128,7 @@ func New(rootDir string, opts ...Option) (*Engine, error) {
 	}
 
 	// Indexer
-	var idx store.Indexer = o.indexer
+	idx := o.indexer
 	if idx == nil {
 		i, err := store.OpenIndex(rootDir)
 		if err != nil {
@@ -138,7 +138,7 @@ func New(rootDir string, opts ...Option) (*Engine, error) {
 	}
 
 	// Fetcher
-	var f fetcher.HTTPFetcher = o.fetcher
+	f := o.fetcher
 	if f == nil {
 		f = fetcher.New(fetcher.Options{
 			UserAgent:    cfg.Settings.UserAgent,
@@ -149,13 +149,13 @@ func New(rootDir string, opts ...Option) (*Engine, error) {
 	}
 
 	// Events
-	var em events.EventEmitter = o.events
+	em := o.events
 	if em == nil {
 		em = events.New(cfg.Settings.EventsURL, "doctrove")
 	}
 
 	// Discovery
-	var disc discovery.ContentDiscoverer = o.discovery
+	disc := o.discovery
 	if disc == nil {
 		// robots.Checker needs the concrete fetcher type for the default path
 		var rc *robots.Checker
@@ -172,7 +172,7 @@ func New(rootDir string, opts ...Option) (*Engine, error) {
 	}
 
 	// Mirror / Syncer
-	var syn mirror.Syncer = o.syncer
+	syn := o.syncer
 	if syn == nil {
 		syn = mirror.New(f, s, idx)
 	}
@@ -184,7 +184,7 @@ func New(rootDir string, opts ...Option) (*Engine, error) {
 	}
 
 	// Categorizer
-	var cat store.Categorizer = o.categorizer
+	cat := o.categorizer
 	if cat == nil {
 		cat = &store.RuleCategorizer{}
 	}
