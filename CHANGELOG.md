@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-03-23
+
+### Changed
+- Rename eventrelay references to postDash throughout documentation and code
+
 ## [1.0.0] - 2026-03-20
 
 Initial public release.
