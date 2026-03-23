@@ -211,7 +211,7 @@ settings:
   timeout: 30s             # HTTP timeout
   max_probes: 100          # companion probes per llms.txt
   user_agent: "doctrove/1.0"
-  events_url: http://localhost:6060/events    # optional eventrelay integration
+  events_url: http://localhost:6060/events    # optional postDash integration
   context7_api_key: ctx7sk-...                # optional Context7 API key
 
 sites:
@@ -238,9 +238,9 @@ Content is stored as plain files under `sites/<domain>/`, tracked by git for cha
 
 When a URL path conflicts with a child path (e.g. `/deploy` exists as a file but `/deploy/getting_started` needs to be stored), the parent file is promoted to a directory with its content at `_index`. ReadContent handles this automatically.
 
-## Event Relay Integration
+## PostDash Integration
 
-When `events_url` is configured, doctrove emits structured events to an [eventrelay](../eventrelay) server for real-time observability. Events follow the full eventrelay schema:
+When `events_url` is configured, doctrove emits structured events to a [postDash](https://github.com/dmoose/postDash) server for real-time observability. Events follow the postDash schema:
 
 ```json
 {

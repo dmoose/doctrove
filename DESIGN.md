@@ -83,7 +83,7 @@ doctrove/
 ├── config/
 │   └── config.go                  # YAML config loading
 ├── events/
-│   ├── emitter.go                 # Event relay
+│   ├── emitter.go                 # PostDash event emitter
 │   └── iface.go                   # EventEmitter interface
 ├── internal/
 │   ├── robots/                    # robots.txt checking (private)
@@ -112,7 +112,7 @@ Every Engine component is behind an interface. Defaults are constructed automati
 | `ContentDiscoverer` | `discovery` | Well-known + companions + sitemap + Context7 | `WithDiscovery()` |
 | `Indexer` | `store` | SQLite FTS5 with path boosting | `WithIndexer()` |
 | `VersionStore` | `store` | go-git | `WithGit()` |
-| `EventEmitter` | `events` | HTTP event relay | `WithEvents()` |
+| `EventEmitter` | `events` | HTTP postDash emitter | `WithEvents()` |
 | `Processor` | `content` | Markdown (code-block aware) | `WithProcessors()` |
 | `Categorizer` | `store` | Rule-based (path + body heuristics) | `WithCategorizer()` |
 | `Summarizer` | `content` | No-op (agent-submitted only) | — |

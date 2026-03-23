@@ -23,7 +23,7 @@ Initial public release.
 - **ETag caching**: conditional fetch on refresh to skip unchanged files
 - **Path collision resolution**: automatic file-to-directory promotion when parent/child URL paths conflict (e.g. `/deploy` and `/deploy/getting_started`)
 - **Rate limiting**: per-host configurable rate limit with burst capacity
-- **Event relay integration**: optional structured event emission for observability
+- **PostDash integration**: optional structured event emission for observability
 - **Functional options API**: all engine components injectable for library usage
 - **10 swappable interfaces**: HTTPFetcher, Syncer, ContentDiscoverer, VersionStore, Indexer, Categorizer, Processor, EventEmitter, and more
 

@@ -1,7 +1,7 @@
 package events
 
 // EventEmitter sends structured events to an observability backend.
-// The default implementation posts to an eventrelay HTTP endpoint.
+// The default implementation posts to a postDash HTTP endpoint.
 // A no-op emitter is used when no URL is configured. Alternative
 // implementations could log to files, send to different backends, etc.
 type EventEmitter interface {

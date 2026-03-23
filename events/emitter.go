@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Event is the structured payload sent to the event relay.
+// Event is the structured payload sent to postDash.
 type Event struct {
 	Source     string         `json:"source"`
 	Channel    string         `json:"channel,omitempty"`
@@ -20,7 +20,7 @@ type Event struct {
 	TS         time.Time      `json:"ts"`
 }
 
-// Emitter sends events to an event relay service.
+// Emitter sends events to a postDash service.
 // If URL is empty, all operations are no-ops (zero overhead).
 type Emitter struct {
 	url     string
